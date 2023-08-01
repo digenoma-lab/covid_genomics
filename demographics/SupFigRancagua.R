@@ -6,7 +6,7 @@ mygraph + geom_histogram(aes(fill=Sex, color=Sex), position = 'dodge') + theme_m
 ggsave("FigSup2A.png")
 
 #Number of both females and males tested in each month - line graph.
-data_rancagua <- read.csv("TimelineRancaguaBySex.csv")
+data_rancagua <- read.csv("TimelineRancaguaBySex_2B.csv")
 ggplot(data_rancagua, aes(Month,Population, group=Sex, color=Sex)) + geom_line() + geom_point() + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Month", y="Age (Years)")
 ggsave("FigSup2B.png")
 
@@ -15,7 +15,7 @@ ggplot(data_rancagua, aes(Population, Month, fill=Sex)) + geom_bar(stat ="identi
 ggsave("FigSup2A_2.png")
 
 #Number of both females and males by age range (decade) - bar graph with males and females positioned one at the side of each other.
-data_rancagua <- read.csv("DataRancagua.csv")
+data_rancagua <- read.csv("TimelineRancaguaByAge.csv")
 ggplot(data_rancagua, aes(Age.Range, fill=Sex)) + geom_bar(position="dodge") + theme_minimal() + theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Age Range (Years)", y="Population") 
 ggsave("SupFig2E.png")
 
@@ -24,6 +24,5 @@ ggplot(data_rancagua, aes(Month)) + geom_bar(aes(fill= AgeRange)) + theme_minima
 ggsave("SupFig2C.png")
 
 #Number of tested people of each age range (decade) per month - line graph.
-data_rancagua <- read.csv("TimelineRancaguaBySex.csv")
 ggplot(data_rancagua, aes(Month,Population, group=AgeRange, color=AgeRange)) + geom_line() + geom_point() + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Month", y="Population") 
 ggsave("SupFig2D.png")
