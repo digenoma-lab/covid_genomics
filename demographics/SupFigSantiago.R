@@ -1,0 +1,5 @@
+data_stgo <- read.csv("DataSantiago_3.csv")
+data_stgo[, 'Date'] <- as.Date(data_stgo[, 'Date'])
+mygraph = ggplot(data_stgo, aes(Date,Age))
+mygraph + geom_point(aes(fill=Sex, color=District, shape=Sex), size=3) + scale_color_brewer(palette="Dark2") + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ scale_x_date(date_breaks="1 day") + labs(x="Month", y="Age (Years)")
+ggsave("SupFig3A.png")
