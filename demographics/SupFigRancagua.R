@@ -1,7 +1,7 @@
 #Number of people of a certain age separated by sex. Males and females are positioned one at the side of each other.
 data_rancagua <- read.csv("DataRancagua.csv")
-data_all[, 'Date'] <- as.Date(data_all[, 'Date'])
-mygraph = ggplot(data_all, aes(Date,Age))
+data_rancagua[, 'Date'] <- as.Date(data_rancagua[, 'Date'])
+mygraph = ggplot(data_rancagua, aes(Date,Age))
 mygraph + geom_histogram(aes(fill=Sex, color=Sex), position = 'dodge') + theme_minimal() + scale_x_continuous(breaks=seq(0,80,by=4)) + labs(x="Age (Years)", y="Frequency")
 ggsave("FigSup2A.png")
 
@@ -26,3 +26,10 @@ ggsave("SupFig2C.png")
 #Number of tested people of each age range (decade) per month - line graph.
 ggplot(data_rancagua, aes(Month,Population, group=AgeRange, color=AgeRange)) + geom_line() + geom_point() + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Month", y="Population") 
 ggsave("SupFig2D.png")
+
+#Characterization of tested people in function of date of testing, age, sex and age range.
+data_rancagua <- read.csv("DataRancagua.csv")
+data_rancagua[, 'Date'] <- as.Date(data_rancagua[, 'Date'])
+mygraph = ggplot(data_rancagua, aes(Date,Age))
+mygraph + geom_point(aes(fill=Age.Range, color=Age.Range, shape=Sex), size=3) + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ scale_x_date(date_breaks="1 month") + labs(x="Month", y="Age (Years)")
+ggsave("SupFig2F.png")
