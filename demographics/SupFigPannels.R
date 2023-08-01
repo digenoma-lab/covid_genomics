@@ -17,3 +17,9 @@ ggplot(data_rancagua, aes(Age.Range, fill=Sex)) + geom_bar(position="dodge") + t
 ggsave("SupFig2E.png")
 
 #Supplementary Pannel for Rancagua - Alternative #2
+#Characterization of tested people in function of date of testing, age, sex and age range.
+data_rancagua <- read.csv("DataRancagua.csv")
+data_rancagua[, 'Date'] <- as.Date(data_rancagua[, 'Date'])
+mygraph = ggplot(data_rancagua, aes(Date,Age))
+mygraph + geom_point(aes(fill=Age.Range, color=Age.Range, shape=Sex), size=3) + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ scale_x_date(date_breaks="1 month") + labs(x="Month", y="Age (Years)")
+ggsave("SupFig2F.png")
