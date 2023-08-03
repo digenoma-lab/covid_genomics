@@ -1,0 +1,14 @@
+##fileformat=VCFv4.2
+##source=iVar
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+##FILTER=<ID=PASS,Description="Result of p-value <= 0.05">
+##FILTER=<ID=FAIL,Description="Result of p-value > 0.05">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=REF_DP,Number=1,Type=Integer,Description="Depth of reference base">
+##FORMAT=<ID=REF_RV,Number=1,Type=Integer,Description="Depth of reference base on reverse reads">
+##FORMAT=<ID=REF_QUAL,Number=1,Type=Integer,Description="Mean quality of reference base">
+##FORMAT=<ID=ALT_DP,Number=1,Type=Integer,Description="Depth of alternate base">
+##FORMAT=<ID=ALT_RV,Number=1,Type=Integer,Description="Deapth of alternate base on reverse reads">
+##FORMAT=<ID=ALT_QUAL,Number=1,Type=String,Description="Mean quality of alternate base">
+##FORMAT=<ID=ALT_FREQ,Number=1,Type=String,Description="Frequency of alternate base">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	V350082740_L14_95-95

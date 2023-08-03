@@ -1,23 +1,31 @@
+---
+title: "qc_covid_genomics"
+date: "`r Sys.Date()`"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library('tidyverse')
-library('openxlsx')
-library('ggbeeswarm')
-library('patchwork')
-library('ggplot2')
+suppressMessages(library('tidyverse'))
+suppressMessages(library('openxlsx'))
+suppressMessages(library('ggbeeswarm'))
+suppressMessages(library('patchwork'))
+suppressMessages(library('ggplot2'))
+
+```
 
 ## Reads Mapped
-setwd('/Users/bbernal/Documents/covid_work/covid_genomics/figure_qc/')
+
+```{r loaddata, echo=FALSE}
 samtools_jfc = read.table('join_flow_cells/multiqc_samtools_stats.txt', header = TRUE)
 samtools_pfc = read.table('per_flow_cells/multiqc_samtools_stats.txt', header = TRUE)
-
-#selecting data
+ #selecting data
 reads_mapped_jfc <- samtools_jfc %>%
   dplyr::select(Sample, reads_mapped, raw_total_sequences, reads_mapped_percent)
 reads_mapped_pfc <- samtools_pfc %>%
   dplyr::select(Sample, reads_mapped, raw_total_sequences, reads_mapped_percent)
 
-reads_mapped_pfc<-reads_mapped_pfc[!grepl("97-97|98-98|99-99|100-100|101-101|102-102|103-103|104-104", 
-                                          reads_mapped_pfc$Sample),]
+reads_mapped_pfc<-reads_mapped_pfc[!grepl("97-97|98-98|99-99|100-100|101-101|102-102|103-103|104-104", reads_mapped_pfc$Sample),]
 
 #adding type of data
 type = c(rep("join_flow_cell", nrow(reads_mapped_jfc)), rep('per_flow_cell',  nrow(reads_mapped_pfc)))
@@ -25,22 +33,28 @@ type = c(rep("join_flow_cell", nrow(reads_mapped_jfc)), rep('per_flow_cell',  nr
 reads_mapped=rbind(reads_mapped_jfc, reads_mapped_pfc)
 #join type of sample
 reads_mapped=cbind(reads_mapped,type)
+```
+### Read mapped plot 
 
-#violin plot with dots 
+violin plot from 99 to 100%.
+
+```{r, rmapped, echo=FALSE}
+
 p3 =ggplot(reads_mapped,aes(y=reads_mapped_percent,x=type,color=type,fill=type, label=Sample))+
   geom_violin() +
-  #geom_point(position = position_jitter(seed = 2, width = 0.5), size = 1.5) +
   xlab("") +
   ylab("Mapped Reads (%)") +
   scale_y_continuous(limits = c(99,100))+
   theme_minimal() +
   theme(legend.position = "none")
 p3
+```
 
-
-#barplot num of reads
+### Number of reads and duplicates plot
+```{r, loadreadcountsdups,echo=FALSE}
+#barplot
 #raw_total_sequences = reads_mapped + reads_unmapped
-p1<-ggplot(reads_mapped,aes(x=raw_total_sequences/100000,y=fct_reorder(Sample,raw_total_sequences),fill=type)) + 
+ p1<-ggplot(reads_mapped,aes(x=raw_total_sequences/100000,y=fct_reorder(Sample,raw_total_sequences),fill=type)) + 
   geom_col()+
   facet_wrap(~type,nrow=1,scales = "free_y")+
   geom_vline(data=filter(reads_mapped,type=="join_flow_cell"),aes(xintercept = 50))+
@@ -50,8 +64,11 @@ p1<-ggplot(reads_mapped,aes(x=raw_total_sequences/100000,y=fct_reorder(Sample,ra
   ylab("Samples") + xlab("Number of reads (M)") +  
   theme_minimal() + theme(axis.text.y = element_text(size=5), legend.position = "none")
 p1
+```
 
-#Per sequence quality score
+## sequence quality score
+
+```{r, loadfastqc,echo=FALSE}
 qc_sequence_quality_jfc=read.table('join_flow_cells/mqc_fastqc_per_base_sequence_quality_plot_1.txt', h=TRUE,sep="\t")
 qc_sequence_quality_jfc.T=setNames(data.frame(t(qc_sequence_quality_jfc[,-1])), qc_sequence_quality_jfc[,1])
 ##add read2
@@ -69,6 +86,11 @@ qc_sequence_quality=seq_qc_merge %>% pivot_longer(-Row.names)
 t2.rect1 = data.frame (ymin=0, ymax=20, xmin=-Inf, xmax=Inf)
 t2.rect2 = data.frame (ymin=20, ymax=28, xmin=-Inf, xmax=Inf)
 t1.rect1 = data.frame (ymin=28, ymax=Inf, xmin=-Inf, xmax=Inf)
+```
+
+
+### Classic plot of quality score
+```{r, fastqc,echo=FALSE}
 
 #Row.names needs to pass as numeric implicit, because it came out of a string and not directly as int
 Color=c("#5cb85cff")
@@ -81,9 +103,13 @@ p2 = ggplot(data=qc_sequence_quality, aes(x=as.numeric(Row.names), y=value, grou
   ylab("Phred score") + xlab("Position (bp)") +
   scale_y_continuous(breaks=seq(0,40,5)) + scale_x_continuous(breaks=seq(0,150,25)) + theme_minimal() + theme(legend.position = "bottom")
 p2
+```
 
 
-##reading tables for coverage
+## Cumulative genome coverage
+Percentage of the reference genome with at least the given depth of coverage.
+ 
+```{r pressure, echo=FALSE}
 genome_cov_jfc =read.table("join_flow_cells/coverage_jfc.txt",h=T,sep = ",")
 genome_cov_pfc =read.table("per_flow_cells/coverage_pfc.txt",h=T,sep = ",")
 genome_cov_pfc<-genome_cov_pfc[!grepl("97-97|98-98|99-99|100-100|101-101|102-102|103-103|104-104", 
@@ -91,7 +117,10 @@ genome_cov_pfc<-genome_cov_pfc[!grepl("97-97|98-98|99-99|100-100|101-101|102-102
 type = c(rep("join_flow_cell", nrow(genome_cov_jfc)), rep('per_flow_cell',  nrow(genome_cov_pfc))) #adding type
 genome_cov=rbind(genome_cov_jfc,genome_cov_pfc)
 genome_cov=cbind(genome_cov, type)
+```
 
+### Genome coverage plot 
+```{r, cumgc, echo=FALSE}
 p4=ggplot(genome_cov,aes(x=CoverageX,y=Value,group=sampleId,color=type)) +
   geom_line(size=1) +
   xlab("Coverage (X)") +
@@ -103,8 +132,14 @@ p4=ggplot(genome_cov,aes(x=CoverageX,y=Value,group=sampleId,color=type)) +
   scale_x_continuous(limits = c(0,200))+
   theme_minimal() + theme(legend.position = "bottom")
 p4
+```
 
-#joining plots
+## Merge Plots
+
+Merging all plots into one figure.
+
+```{r mergeplots, echo=FALSE, fig.width=11,fig.height=10}
+
 mplot=(p1|p2)/(p3|p4) +
   plot_annotation(tag_levels = 'A') &
   theme(plot.tag = element_text(size = 15))
@@ -113,3 +148,14 @@ pdf("Fig1_Sup.pdf",12,11)
 mplot
 dev.off()
 mplot
+
+```
+
+
+## R session info
+
+print the session information.
+
+```{r session-info, include=TRUE, echo=TRUE, results='markup'}
+devtools::session_info()
+```
