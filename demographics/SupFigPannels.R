@@ -1,0 +1,25 @@
+#Supplementary Pannel for Santiago
+data_stgo <- read.csv("DataSantiago_3.csv")
+data_stgo[, 'Date'] <- as.Date(data_stgo[, 'Date'])
+mygraph = ggplot(data_stgo, aes(Date,Age))
+mygraph + geom_point(aes(fill=Sex, color=District, shape=Sex), size=3) + scale_color_brewer(palette="Dark2") + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ scale_x_date(date_breaks="1 day") + labs(x="Month", y="Age (Years)")
+ggsave("SupFig3A.png")
+
+#Supplementary Pannel for Rancagua - Alternative #1
+#Number of both females and males tested in each month - bar graph.
+data_rancagua <- read.csv("TimelineRancaguaBySex_2B.csv")
+ggplot(data_rancagua, aes(Population, Month, fill=Sex)) + geom_bar(stat ="identity", position="dodge") + coord_flip() + theme_minimal() + theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Population", y="Month")
+ggsave("FigSup2A_2.png")
+
+#Number of both females and males by age range (decade) - bar graph with males and females positioned one at the side of each other.
+data_rancagua <- read.csv("TimelineRancaguaByAge.csv")
+ggplot(data_rancagua, aes(Age.Range, fill=Sex)) + geom_bar(position="dodge") + theme_minimal() + theme(axis.text.x = element_text(angle=90, hjust=1))+ labs(x="Age Range (Years)", y="Population") 
+ggsave("SupFig2E.png")
+
+#Supplementary Pannel for Rancagua - Alternative #2
+#Characterization of tested people in function of date of testing, age, sex and age range.
+data_rancagua <- read.csv("DataRancagua.csv")
+data_rancagua[, 'Date'] <- as.Date(data_rancagua[, 'Date'])
+mygraph = ggplot(data_rancagua, aes(Date,Age))
+mygraph + geom_point(aes(fill=Age.Range, color=Age.Range, shape=Sex), size=3) + theme_minimal() + theme(text = element_text(size=15)) +theme(axis.text.x = element_text(angle=90, hjust=1))+ scale_x_date(date_breaks="1 month") + labs(x="Month", y="Age (Years)")
+ggsave("SupFig2F.png")
