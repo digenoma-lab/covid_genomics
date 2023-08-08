@@ -15,8 +15,6 @@ suppressMessages(library('patchwork'))
 suppressMessages(library('ggplot2'))
 suppressMessages(library('reshape2'))
 suppressMessages(library('ComplexHeatmap'))
-suppressMessages(library('here'))
-
 
 ```
 
@@ -26,8 +24,7 @@ Reading results from iVar and freya from join_flow_cell pipeline and including d
 
 ```{r loaddata, echo=FALSE}
 #Ivar results
-
-ivar_files <- list.files(path = "/join_flow_cells/ivar_variants", pattern = "\\.tsv$", recursive = T, full.names = TRUE)
+ivar_files <- list.files(path = "analysis/join_flow_cells/ivar_variants/", pattern = "\\.tsv$", recursive = T, full.names = TRUE)
 
 sample <- ivar_files[0:96]
 ivar_results <- list()
@@ -41,6 +38,7 @@ for(i in sample){
 
 #generation of binary matrix 
 mut_matrix <- t(splitstackshape:::charMat(listOfValues = ivar_results, fill = 0L))
+
 colnames(mut_matrix) <- names(ivar_results)
 mut_matrix <- mut_matrix[order(rowSums(mut_matrix),decreasing=T),] #sort by position with more mutations
 mut_matrix <- t(mut_matrix) #transpose
@@ -96,23 +94,22 @@ all_results$analisis_data <- demographic_info$Fecha.Análisis
 
 ```
 
+## Results
+
 ### Mutation Heatmap
 
 Using ComplexHeatmap library to plot if samples has 1 or any mutations detected by iVar, using a binary matrix. Variant a location is also included into the heatmap.
 
 ```{r, heatmapivar, echo=FALSE}
+#colors setting 
+variant <- setNames(RColorBrewer::brewer.pal(name = "Accent", n = length(unique(all_results$variant))), unique(all_results$variant))
+location = c("Rancagua" =  "royalblue", 
+             "Santiago" = "brown3")
+col.list <- list(variant = variant, location = location)
 
 h_ann= rowAnnotation(location = all_results$location,
                         variant = all_results$variant,
-                        col = list(location = c("Rancagua" =  "royalblue", 
-                                            "Santiago" = "brown3"), 
-                                   variant = c("Other" = "#DF536B",
-                                               "Gamma" = "#28E2E5",
-                                               "Lambda" = "#2297E6",
-                                               "Epsilon" = "gray62",
-                                               "Alpha" = "#CD0BBC",              
-                                               "BA.2* [Omicron (BA.2.X)]" =  "#F5C710",
-                                               "Omicron" = "#61D04F" )),
+                        col = col.list,
                         gp = gpar(fontsize = 3),
                         border = TRUE)
 p1 <- Heatmap(mut_matrix, 
@@ -132,10 +129,69 @@ p1
 Combining mutations detected by iVar and variations in to positions detected by Freya. Including variant information and location of samples.
 
 ```{r, mutations, echo=FALSE}
-p2 <- ggplot(data=all_results, aes(x=mut_ivar, y=value, label=sampleId, 
-                             colour = variant, shape=location)) + 
+p2 <- ggplot(data=all_results, aes(x=mut_ivar, y=value, label=sampleId, shape=location,       colour = variant)) +
   geom_point() +
+  scale_color_manual('', values = col.list$variant) + 
   theme_minimal()
 
 p2
+```
+
+### Heterogeneity between groups
+
+In the previous there are three identifiable groups in the samples. Here is the analysis to check if in every variant posible in the genome and detected genes that are most mutated in the samples.
+
+#### Groups:
+
+```{r, groups, echo=FALSE}
+
+p2 + geom_vline(xintercept = 21,color="red2",
+                       linetype='dotted',size=0.5) +
+            geom_vline(xintercept = 40,color="red2",
+                        linetype='dotted',size=0.5)
+
+```
+
+##Samtools depth 
+
+Checking depth of the samples and separate them by variant and location 
+
+```{r, loadsamtools, echo=FALSE}
+samtools_files <- list.files(path = "/analysis/join_flow_cells/samtools_depth/", pattern = "\\.txt$", recursive = T, full.names = TRUE)
+sample <- samtools_files[0:96]
+
+depth <- list()
+for(i in sample){
+  #transform name of sample to sample_NN
+  sample = paste('sample_',strsplit(strsplit(strsplit(i, '/')[[1]][10], '_')[[1]][3], '.', fixed = TRUE)[[1]][1], sep = '')
+  variant <- substring(sample, 1, nchar(sample)-3)
+  df <- read.table(i, h=FALSE,sep="\t")
+  colnames(df) <- c('ref', 'pos', 'depth')
+  depth[[variant]] <- df}
+
+samtools_results <- lapply(depth, as.data.frame) %>% 
+  bind_rows(.id = "sampleId")
+samtools_results <- left_join(samtools_results,all_results[c('sampleId', 'location', 'variant')], by="sampleId")
+samtools_results <- samtools_results[,-2]
+samtools_results<-samtools_results[!grepl("71", 
+                                          samtools_results$sample),]
+
+samtools_depth_range <- samtools_results %>%
+  group_by(sampleId, grp = cut(pos, breaks=pretty(pos, n = 60)), location, variant) %>% 
+  summarise(count = mean(depth))
+
+```
+### Samtools depth plot
+```{r, depth, echo=FALSE}
+p3 <- ggplot(samtools_depth_range , aes(x = grp, y=log(count),  
+                                     colour = variant)) +
+  geom_line(aes(group = sampleId), size = 0.3, alpha = 0.8)+
+  geom_hline(yintercept = log(100),color="red2",
+             linetype='dotted',size=0.5) +
+  annotate("text", x = 45, y = log(100), label = "100X Coverage", vjust = -0.5, size=3) + 
+  facet_grid(rows = vars(variant), col = vars(location)) +
+  scale_color_manual('', values = col.list$variant) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size = 5))
+
+p3
 ```
