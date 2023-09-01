@@ -52,8 +52,8 @@ First we check basics stats as mean and standard deviation
     ## # A tibble: 3 × 5
     ##   cluster variable     n  mean    sd
     ##   <fct>   <fct>    <dbl> <dbl> <dbl>
-    ## 1 1       value      900  428.  225.
-    ## 2 2       value     1080  583.  193.
+    ## 1 1       value     1080  583.  193.
+    ## 2 2       value      900  428.  225.
     ## 3 3       value      870  516.  193.
 
 First, it performs an anova to check the effects of cluster labeling
@@ -69,9 +69,9 @@ Then to compare difference between groups it performs a t-test
     ## # A tibble: 3 × 10
     ##   .y.   group1 group2    n1    n2        p method    p.adj p.signif p.adj.signif
     ## * <chr> <chr>  <chr>  <int> <int>    <dbl> <chr>     <dbl> <chr>    <chr>       
-    ## 1 value 1      2        900  1080 1.30e-60 T-test 3.91e-60 ****     ****        
-    ## 2 value 1      3        900   870 1.89e-19 T-test 5.68e-19 ****     ****        
-    ## 3 value 2      3       1080   870 8.61e-13 T-test 2.58e-12 ****     ****
+    ## 1 value 1      2       1080   900 1.30e-60 T-test 3.91e-60 ****     ****        
+    ## 2 value 1      3       1080   870 8.61e-13 T-test 2.58e-12 ****     ****        
+    ## 3 value 2      3        900   870 1.89e-19 T-test 5.68e-19 ****     ****
 
 Now we plot the data in a boxplot, showing anova result and t-test.
 ![](02_analysis_files/figure-gfm/statsplot-1.png)<!-- -->

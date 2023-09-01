@@ -1,0 +1,173 @@
+---
+title: "Windows analysis"
+output: html_document
+date: "2023-09-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library('tidyverse'))
+suppressMessages(library('patchwork'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('reshape2'))
+suppressMessages(library('Gviz'))
+suppressMessages(library('reticulate'))
+py_install("pandas")
+
+use_python('/usr/local/bin/python3')
+knitr::knit_engines$set(python = reticulate::eng_python)
+options(ucscChromosomeNames=FALSE)
+```
+
+# Analysis of windows
+
+After the statistical test comparing the clusters defined and detecting significant windows in the genome, it calculated how many samples has variations in determinate positions in the genome and related to specifics genes, to do this this analysis is made in python and to incorporate in the plots the genome of covid it uses the library gviz.
+
+## Getting number of samples with variations in the COVID genome
+
+This code in python process all files from freyja to detect how many samples has variations/mutations in particular positions. Samples are separated in clusters that were previously detected with kmeans in 02_analysis and are saved in all_results.csv.
+
+```{python}
+
+import os 
+import pandas as pd
+
+def listdir_fullpath(d):
+    return [os.path.join(d, f) for f in os.listdir(d)]
+  
+#reading data
+all_results = pd.read_csv('all_results.csv')  
+
+freya_files = sorted(listdir_fullpath('join_flow_cells/freyja'))
+
+#separating clusters 
+cluster1 = list(all_results[(all_results['cluster'] == 1)]['sampleId'])
+cluster2 = list(all_results[(all_results['cluster'] == 2)]['sampleId'])
+cluster3 = list(all_results[(all_results['cluster'] == 3)]['sampleId'])
+
+cluster_lists = {'cluster1': cluster1,
+'cluster2': cluster2,
+'cluster3': cluster3}
+
+samples_per_position = {}
+for cluster_name,cluster_list in cluster_lists.items():
+    cluster = {}
+    for sample in cluster_list:
+        for file in freya_files:
+            if file.endswith('variants.tsv'):
+                file_name = file.split('.')[0].split('/')[-1:][0][:-9].split('_')[-1]
+                #checking files per clusters 
+                sample_name = 'sample_{}'.format(file_name)[:-3]
+                if sample == sample_name:
+
+                    data = pd.read_csv(file, sep='\t')
+                    pass_filter = data[data["PASS"] == True]
+                    #saving positions detected per sample file
+                    for pos in pass_filter['POS'].values:
+                        if pos not in cluster:
+                            cluster[pos] = []
+                        cluster[pos].append(sample_name)
+
+    samples_per_position[cluster_name] = cluster
+
+#checking positions and saving samples if has variations in specific positions
+count_per_pos = {}
+for cluster,list_count in samples_per_position.items():
+    cluster_count = {}
+    for pos,samples in list_count.items():
+        new_values = set(samples)
+        cluster_count[pos] = len(new_values)
+    
+    count_per_pos[cluster] = cluster_count
+    
+count_per_pos_table= pd.DataFrame.from_dict(count_per_pos)
+
+pd.DataFrame.from_dict(count_per_pos_table).to_csv('windows_cluster.csv', sep=',')
+
+```
+
+## Gviz 
+
+Uploading data of positions.
+```{r windows_data, echo=FALSE}
+all_results <-read.table('all_results.csv', h=TRUE,sep=",")
+windows <-read.table('windows_cluster.csv', h=TRUE,sep=",")
+#sorting windows to be in numerical order
+windows <- windows[order(windows$X),]
+#replacing na values with zeros
+windows[is.na(windows)] <- 0
+head(windows)
+
+#getting coordinates to be accepted in gviz
+coords <- as.numeric(windows$X)
+coords <- append(coords, 23000)
+coords <- sort(coords)
+
+#separating cluster and normalizing by number of samples in each cluster
+n_samples <- table(all_results$cluster)
+cluster1 <- windows$cluster1/n_samples[1]
+cluster2 <- windows$cluster2/n_samples[2]
+cluster3 <- windows$cluster3/n_samples[3]
+
+```
+
+## Setting variable to gviz
+```{r gviz_settings, echo=FALSE}
+dtrack1 <- DataTrack(data = cluster1, start = coords[-length(coords)], 
+                     end = coords[-1], chromosome = 'NC_045512v2', genome = 'wuhCor1', 
+                     groups = factor("cluster 1", 
+                              levels = c("cluster 1", "cluster 2", "cluster 3")),
+                     name = "#samples",
+                     legend = TRUE)
+
+dtrack2 <- DataTrack(data = cluster2, start = coords[-length(coords)], 
+                     end = coords[-1], chromosome = 'NC_045512v2', genome = 'wuhCor1', 
+                     groups = factor("cluster 2", 
+                                     levels = c("cluster 1", "cluster 2", "cluster 3")), 
+                     name = "#samples",
+                     legend = TRUE)
+
+dtrack3 <- DataTrack(data = cluster3, start = coords[-length(coords)], 
+                     end = coords[-1], chromosome = 'NC_045512v2', genome = 'wuhCor1', 
+                     groups = factor("cluster 3", 
+                                     levels = c("cluster 1", "cluster 2", "cluster 3")), 
+                     name = "#samples",
+                     legend = TRUE)
+
+#size of dots and width of lines 
+displayPars(dtrack1) <- list(lwd = 3, cex=0.7, alpha=0.9)
+displayPars(dtrack2) <- list(lwd = 3, cex=0.7, alpha=0.9)
+displayPars(dtrack3) <- list(lwd = 3, cex=0.7, alpha=0.9)
+
+#genes to be ploted
+gtrack <- GenomeAxisTrack(range = IRanges(start = c(19620,21560), 
+                                          end = c(20650, 25000),
+                                          names = c('Endonucleasa', 'Spike')))
+
+#join dtrack data
+ot <- OverlayTrack(trackList=list(dtrack1, dtrack2, dtrack3), name = "# samples")
+#covid genome
+idxTrack <- IdeogramTrack(genome="wuhCor1")
+#box to highlight windows o interest
+ht1 <- HighlightTrack(trackList=list(idxTrack, gtrack, ot), 
+                      start = 20000, end = 23000, 
+                      chromosome = "NC_045512v2")
+
+print(dtrack1)
+print(idxTrack)
+```
+
+### All genome with higlight in specific window
+```{r plot1, echo=FALSE}
+plotTracks(list(ht1),
+           from = 100, to = 29900, 
+           type =  c("p", "smooth"), window=200, showId = TRUE)
+```
+
+### Specific window 
+```{r plot2, echo=FALSE}
+plotTracks(list(idxTrack,gtrack, ot),
+           from = 20000, to = 23000, 
+           type =  c("p", "smooth"), window=500)
+
+```

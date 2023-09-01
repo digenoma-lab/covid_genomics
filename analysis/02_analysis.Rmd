@@ -88,6 +88,8 @@ Generate clusters trough kmeans with k = 3.
 res.kmeans <- kmeans(all_results[,c("mut_ivar")], centers = 3, 
                      iter.max = 100, nstart = 50)
 all_results$cluster <- factor(res.kmeans$cluster)
+write.csv(all_results,file='all_results.csv', row.names=FALSE)
+
 
 ggplot(data=all_results, aes(x=mut_ivar, y=pass_freya, label=sampleId, 
                              shape=location, colour = cluster)) +
