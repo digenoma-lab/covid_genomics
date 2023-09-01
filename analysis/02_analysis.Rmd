@@ -1,0 +1,170 @@
+---
+title: "Analysis of COVID samples"
+output: rmarkdown::github_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressMessages(library('tidyverse'))
+suppressMessages(library('ggbeeswarm'))
+suppressMessages(library('patchwork'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('reshape2'))
+suppressMessages(library('ComplexHeatmap'))
+suppressMessages(library('rstatix'))
+suppressMessages(library('ggpubr'))
+suppressMessages(library('ggsignif'))
+```
+
+## Reading files
+
+Reading results from iVar and freya from preprocessing output to generated figures.
+
+```{r loaddata, echo=FALSE}
+#Ivar results
+#reading binary matrix of presence/absence of mutations detected by iVar 
+ivar_results <- as.matrix(read.table('ivar_results.tsv', 
+                           h=TRUE,sep="\t", check.names = FALSE, row.names = 1))
+#deleting sample 71
+ivar_results <- ivar_results[-71,]
+
+all_results <- read.table(file='all_results.csv', sep=',', h=TRUE)
+head(all_results)
+```
+
+## Results
+
+### Mutation Heatmap
+
+Using ComplexHeatmap library to plot if samples has 1 or any mutations detected by iVar, using a binary matrix. Variant a location is also included into the heatmap.
+
+```{r, heatmapivar, echo=FALSE}
+#colors setting 
+variant <- setNames(RColorBrewer::brewer.pal(name = "Dark2", n = length(unique(all_results$variant))), unique(all_results$variant))
+location = c("Rancagua" =  "royalblue", 
+             "Santiago" = "brown3")
+col.list <- list(variant = variant, location = location)
+
+h_ann= rowAnnotation(location = all_results$location,
+                        variant = all_results$variant,
+                        col = col.list,
+                        gp = gpar(fontsize = 3),
+                        border = TRUE)
+p1 <- Heatmap(ivar_results, 
+               name = "Presence/Absence of mutations",
+               rect_gp = gpar(col = "gray70", lwd = 0.1),
+               row_names_gp = gpar(fontsize = 7, col ='gray9'),
+               column_names_gp = gpar(fontsize = 4, col ='gray9'), # Text size for row names
+               col = c("seagreen", "blue3"),
+               row_km = 2,
+               right_annotation = h_ann)
+
+p1
+```
+
+### Number of variants vs heterogeneity 
+
+Combining mutations detected by iVar and variations in to positions detected by Freya. Including variant information and location of samples.
+
+```{r, mutations, echo=FALSE}
+p2 <- ggplot(data=all_results, aes(x=mut_ivar, y=pass_freya, label=sampleId, shape=location, colour = variant)) +
+  geom_point() +
+  scale_color_manual('', values = col.list$variant) + 
+  theme_minimal()
+
+p2
+```
+
+## Heterogeneity between groups
+
+In the previous there are three identifiable groups in the samples. Here is the analysis to check if in every variant posible in the genome and detected genes that are most mutated in the samples.
+
+#### Groups:
+
+Generate clusters trough kmeans with k = 3.
+```{r, groups, echo=FALSE}
+res.kmeans <- kmeans(all_results[,c("mut_ivar")], centers = 3, 
+                     iter.max = 100, nstart = 50)
+all_results$cluster <- factor(res.kmeans$cluster)
+
+ggplot(data=all_results, aes(x=mut_ivar, y=pass_freya, label=sampleId, 
+                             shape=location, colour = cluster)) +
+  geom_point() + 
+  theme(legend.text = element_text(size=0.2)) + 
+  theme_minimal()
+
+```
+### Staticistic tests
+
+First we check basics stats as mean and standard deviation
+```{r, loadvariants, echo=FALSE}
+pos_variant <- read.table('pos_variants.csv', h=TRUE,sep=",")
+pos_variant <- melt(pos_variant)
+pos_variant <-  left_join(pos_variant, all_results, by = c("variable" = "sampleId")) %>%
+  select(contains(c('X', 'variable', 'value','cluster','variant','location','cluster')))
+
+pos_variant %>%
+  group_by(cluster) %>%
+  get_summary_stats(value, type = "mean_sd")
+```
+First, it performs an anova to check the effects of cluster labeling into the variations in the genome position.
+```{r, anova, echo=FALSE}
+#primer approach
+res.aov <- pos_variant %>% anova_test(value ~ cluster)
+res.aov
+```
+Then to compare difference between groups it performs a t-test
+```{r, t_test, echo=FALSE}
+
+pwc <- pos_variant %>%
+  pairwise_t_test(value ~ cluster, p.adjust.method = "bonferroni", detailed = TRUE)
+pwc
+pwc <- pwc %>% add_xy_position(x = "cluster")
+```
+
+Now we plot the data in a boxplot, showing anova result and t-test.
+```{r, statsplot, echo=FALSE}
+#test between groups
+ggplot(pos_variant, aes(x=cluster, y=value, colour=factor(cluster))) + 
+  geom_boxplot() + 
+  stat_pvalue_manual(pwc, cluster = "p.adj", tip.length = 0, step.increase = 0.1) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  ) + theme_minimal()
+
+```
+
+## Samtools depth 
+
+Checking depth of the samples and separate them by variant and location.
+
+```{r, loadsamtools, echo=FALSE}
+samtools_results <-read.table('/Users/bbernal/Documents/covid_work/samtools_depth.csv', h=TRUE,sep=",")
+samtools_results <- melt(samtools_results, id="X")
+colnames(samtools_results) <- c('pos', 'sampleId', 'depth')
+
+samtools_results <- left_join(samtools_results,all_results[c('sampleId', 'location', 'variant')], by="sampleId")
+samtools_results<-samtools_results[!grepl("71", samtools_results$sample),]
+
+samtools_depth_range <- samtools_results %>%
+  group_by(sampleId, grp = cut(pos, breaks=pretty(pos, n = 60)), location, variant) %>% 
+  summarise(count = mean(depth))
+
+```
+### Samtools depth plot
+```{r, depth, echo=FALSE}
+p3 <- ggplot(samtools_depth_range , aes(x = grp, y=log(count),  
+                                     colour = variant)) +
+  geom_line(aes(group = sampleId), size = 0.3, alpha = 0.8)+
+  geom_hline(yintercept = log(100),color="red2",
+             linetype='dotted',size=0.5) +
+  annotate("text", x = 45, y = log(100), label = "100X Coverage", vjust = -0.5, size=3) + 
+  facet_grid(rows = vars(variant), col = vars(location)) +
+  scale_color_manual('', values = col.list$variant) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size = 5))
+
+p3
+```

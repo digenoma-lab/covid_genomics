@@ -1,0 +1,154 @@
+---
+title: "Preprocessing of COVID samples"
+output: rmarkdown::github_document
+date: "2023-08-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressMessages(library('tidyverse'))
+suppressMessages(library('ggbeeswarm'))
+suppressMessages(library('patchwork'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('reshape2'))
+suppressMessages(library('ComplexHeatmap'))
+suppressMessages(library('reticulate'))
+use_python('/usr/local/bin/python3')
+knitr::knit_engines$set(python = reticulate::eng_python)
+
+```
+
+## Processing results in python 
+
+Cecret Nextflow pipeline was used to identify SARS-COV-2 variants in the samples. This pipeline contains multiple tools that allows us to detect variant types, mutations and heterogeneity in the samples. For this case we use the outcome from freyja and iVar.
+
+In this step we take the tsv files that contains the results of the analysis of this tools and processing into tables to work with them further.
+
+```{python, results='hide'}
+
+import pandas as pd
+import ast
+import os 
+#function to have the full path of each file in a folder
+def listdir_fullpath(d):
+    return [os.path.join(d, f) for f in os.listdir(d)]
+  
+#position variant from freya
+freya_files = sorted(listdir_fullpath('join_flow_cells/freyja'))
+
+with open('freya_results.txt', 'w') as f: #file to save results
+    f.write('sampleId,th_filter,pass_filter')
+    f.write('\n')
+    for file in freya_files:
+        
+        if file.endswith('variants.tsv'): #open files where are the results of variants per position 
+            data = pd.read_csv(file, sep='\t')
+            #choosing to type of filters to select data
+            th_filter = len(data[data["ALT_DP"]>400])
+            pass_filter = len(data[data["PASS"] == True])
+            sample_name = file.split('.')[0].split('/')[-1:][0][:-9] #sample name 
+            f.write('{},{},{}'.format(sample_name,th_filter,pass_filter))
+            f.write('\n')
+
+#covid variant 
+covid_variant = pd.read_csv('join_flow_cells/freyja/aggregated-freyja.tsv', sep='\t')
+all_variants = {}
+for index, row in covid_variant.iterrows():
+    sample = 'sample_{}'.format(row['Unnamed: 0'].split('.')[0].split('_')[2])
+    variants = ast.literal_eval(row['summarized'])
+    all_variants[sample] = dict(variants)
+
+all_variants = pd.DataFrame(all_variants)
+all_variants.to_csv('freya_variants.tsv', sep='\t')
+
+ivar_files = sorted(listdir_fullpath('join_flow_cells/ivar_variants'))
+positions = {}
+
+for file in ivar_files:   
+    if file.endswith('variants.tsv'): #open files where are the results of variants per position 
+        sample_name = 'sample_{}'.format(file.split('.')[0].split('/')[-1][-2:])
+        data = pd.read_csv(file, sep='\t')
+        count = {}
+        for pos in data[['POS']].values:
+            count[pos[0]] = 1
+       
+        positions[sample_name] = count
+
+ivar_results = pd.DataFrame(positions).fillna(0).transpose()
+
+ivar_results.to_csv('ivar_results.tsv', sep='\t', float_format='%.0f')
+
+#
+samtools_depth = sorted(listdir_fullpath('join_flow_cells/samtools_depth'))
+
+samtools_data = {}
+for file in samtools_depth:      
+    if file.endswith('depth.txt'):
+        file_name = file.split('.')[0].split('/')[-1:][0].split('_')[-1]
+        sample_name = 'sample_{}'.format(file_name)[:-3]
+        data = pd.read_csv(file, sep='\t', names=['ref', 'pos', 'depth'])
+        #transforming data into a dictionary for easy transform into dataframe
+        values = pd.Series(data.depth.values,index=data.pos).to_dict()
+        samtools_data[sample_name] = values
+        
+pd.DataFrame(samtools_data).to_csv('samtools_depth.csv', sep=',')
+```
+## Joining data in R
+
+After python codes generate tables from the iVar and Freyja output this are joined using R with the demographic information.
+
+```{r loaddata, echo=FALSE}
+#reading binary matrix of presence/absence of mutations detected by iVar 
+ivar_results <- as.matrix(read.table('ivar_results.tsv', 
+                           h=TRUE,sep="\t", check.names = FALSE, row.names = 1))
+#deleting sample 71
+ivar_results <- ivar_results[-71,]
+#counting how many mutations by Ivar has every sample
+n_mut_ivar <- data.frame(rowSums(ivar_results))
+n_mut_ivar <- cbind(newColName = rownames(n_mut_ivar), n_mut_ivar)
+rownames(n_mut_ivar) <- 1:nrow(n_mut_ivar)
+colnames(n_mut_ivar) <- c('sample','num_mut')
+
+#freya results
+freya_results <-read.table('freya_results.txt', h=TRUE,sep=",")
+freya_variants <-read.table('freya_variants.tsv', h=TRUE,sep="\t")
+freya_variants <- freya_variants[,order(colnames(freya_variants))]
+freya_variants <- melt(freya_variants)
+#getting variant more prevalent
+max <- freya_variants %>% group_by(variable) %>% top_n(1, value) 
+
+
+#Demographic samples info
+demographic_info <- read.table('/Users/bbernal/Documents/covid_work/demographic.csv', h=TRUE,sep=",")
+demographic_info = demographic_info[c('sample', 'Comuna', 'Fecha.Análisis', 'Edad')]
+demographic_info <- demographic_info %>% 
+  mutate(ciudad = case_when(Comuna == 'RANCAGUA'  ~ 'Rancagua' ,
+                            .default = 'Santiago'))
+
+demographic_info <- demographic_info[order(match(demographic_info[,1],rownames(ivar_results))),]
+
+demographic_info<-demographic_info[!grepl("71", 
+                          demographic_info$sample),]
+
+#adding freya results with sampleid names from ivar (normalizing sample names)
+freya_results$sampleId <- n_mut_ivar$sample
+#melt to plot 
+freya_results <- melt(freya_results, id="sampleId")
+freya_results <- filter(freya_results, variable == "pass_filter")
+
+#joining all results
+all_results <- cbind(freya_results, mut_ivar = n_mut_ivar$num_mut)
+all_results$variant <- max$X
+all_results$location <- demographic_info$ciudad
+all_results$age <- demographic_info$Edad
+all_results$analisis_data <- demographic_info$Fecha.Análisis
+all_results <- all_results[,-2]
+all_results <- all_results %>% rename("pass_freya" = "value")
+
+head(all_results)
+
+write.table(all_results, file='all_results.csv', sep=',', row.names=FALSE)
+
+```
+

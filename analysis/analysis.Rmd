@@ -6,10 +6,8 @@ date: "`r Sys.Date()`"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::current_input(dir = TRUE)
 
 suppressMessages(library('tidyverse'))
-suppressMessages(library('openxlsx'))
 suppressMessages(library('ggbeeswarm'))
 suppressMessages(library('patchwork'))
 suppressMessages(library('ggplot2'))
@@ -24,15 +22,17 @@ Reading results from iVar and freya from join_flow_cell pipeline and including d
 
 ```{r loaddata, echo=FALSE}
 #Ivar results
-ivar_files <- list.files(path = "analysis/join_flow_cells/ivar_variants/", pattern = "\\.tsv$", recursive = T, full.names = TRUE)
+ivar_files <- list.files(path = "join_flow_cells/ivar_variants/", pattern = "\\.tsv$", recursive = T, full.names = TRUE)
 
 sample <- ivar_files[0:96]
 ivar_results <- list()
 for(i in sample){
+  print(i)
   sample = paste('sample_', 
                  strsplit(strsplit(strsplit(i, '/')[[1]][10], '_')[[1]][3],  '.', fixed = TRUE)[[1]][1], 
                  sep = '')
   variant <- substring(sample, 1, nchar(sample)-3)
+  print(variant)
   df <- read.table(i, h=TRUE,sep="\t")
   ivar_results[[variant]] <- df$POS}
 
