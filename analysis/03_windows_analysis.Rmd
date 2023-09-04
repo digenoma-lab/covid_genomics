@@ -1,7 +1,7 @@
 ---
 title: "Windows analysis"
-output: html_document
-date: "2023-09-01"
+output: rmarkdown::github_document
+date: "`r Sys.Date()`"
 ---
 
 ```{r setup, include=FALSE}
@@ -28,7 +28,6 @@ After the statistical test comparing the clusters defined and detecting signific
 This code in python process all files from freyja to detect how many samples has variations/mutations in particular positions. Samples are separated in clusters that were previously detected with kmeans in 02_analysis and are saved in all_results.csv.
 
 ```{python}
-
 import os 
 import pandas as pd
 
@@ -83,7 +82,6 @@ for cluster,list_count in samples_per_position.items():
 count_per_pos_table= pd.DataFrame.from_dict(count_per_pos)
 
 pd.DataFrame.from_dict(count_per_pos_table).to_csv('windows_cluster.csv', sep=',')
-
 ```
 
 ## Gviz 
@@ -140,9 +138,9 @@ displayPars(dtrack2) <- list(lwd = 3, cex=0.7, alpha=0.9)
 displayPars(dtrack3) <- list(lwd = 3, cex=0.7, alpha=0.9)
 
 #genes to be ploted
-gtrack <- GenomeAxisTrack(range = IRanges(start = c(19620,21560), 
-                                          end = c(20650, 25000),
-                                          names = c('Endonucleasa', 'Spike')))
+gtrack <- GenomeAxisTrack(range = IRanges(start = c(19620, 21560,26245, 26523, 28274), 
+                                          end = c(20650, 25384, 26472, 27191, 29533),
+                                          names = c('Endonucleasa', 'Spike', "E", "M", "N")))
 
 #join dtrack data
 ot <- OverlayTrack(trackList=list(dtrack1, dtrack2, dtrack3), name = "# samples")
@@ -150,7 +148,7 @@ ot <- OverlayTrack(trackList=list(dtrack1, dtrack2, dtrack3), name = "# samples"
 idxTrack <- IdeogramTrack(genome="wuhCor1")
 #box to highlight windows o interest
 ht1 <- HighlightTrack(trackList=list(idxTrack, gtrack, ot), 
-                      start = 20000, end = 23000, 
+                      start = c(22000, 26000, 27000), end = c(23000, 27000, 28000), 
                       chromosome = "NC_045512v2")
 
 print(dtrack1)
@@ -160,14 +158,14 @@ print(idxTrack)
 ### All genome with higlight in specific window
 ```{r plot1, echo=FALSE}
 plotTracks(list(ht1),
-           from = 100, to = 29900, 
-           type =  c("p", "smooth"), window=200, showId = TRUE)
+           from = 0, to = 29900, 
+           type =  c("p", "smooth"), window=500, showId = TRUE)
 ```
 
 ### Specific window 
 ```{r plot2, echo=FALSE}
-plotTracks(list(idxTrack,gtrack, ot),
-           from = 20000, to = 23000, 
-           type =  c("p", "smooth"), window=500)
+plotTracks(list(ht1),
+           start = c(22000, 26000, 27000), end = c(23000, 27000, 28000), 
+           type =  c("p", "smooth"), window=50, showId = TRUE)
 
 ```
