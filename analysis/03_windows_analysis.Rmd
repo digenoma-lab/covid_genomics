@@ -110,7 +110,7 @@ cluster3 <- windows$cluster3/n_samples[3]
 ```
 
 ## Setting variable to gviz
-```{r gviz_settings, echo=FALSE}
+```{r gviz_settings, echo=TRUE}
 dtrack1 <- DataTrack(data = cluster1, start = coords[-length(coords)], 
                      end = coords[-1], chromosome = 'NC_045512v2', genome = 'wuhCor1', 
                      groups = factor("cluster 1", 
@@ -156,14 +156,14 @@ print(idxTrack)
 ```
 
 ### All genome with higlight in specific window
-```{r plot1, echo=FALSE}
+```{r plot1, echo=TRUE}
 plotTracks(list(ht1),
            from = 0, to = 29900, 
            type =  c("p", "smooth"), window=500, showId = TRUE)
 ```
 
 ### Specific window 
-```{r plot2, echo=FALSE}
+```{r plot2, echo=TRUE}
 plotTracks(list(ht1),
            start = c(22000, 26000, 27000), end = c(23000, 27000, 28000), 
            type =  c("p", "smooth"), window=50, showId = TRUE)
