@@ -1,0 +1,149 @@
+---
+title: "COVID context in Chile: GISAID data"
+output: rmarkdown::github_document
+date: "`r Sys.Date()`"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressMessages(library('tidyverse'))
+suppressMessages(library('patchwork'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('reshape2'))
+suppressMessages(library('lubridate'))
+suppressMessages(library('reticulate'))
+use_python('/usr/local/bin/python3')
+knitr::knit_engines$set(python = reticulate::eng_python)
+```
+
+# Getting GISAID data
+
+GISAID is a database of covid sequences from all the world. In Chile, are reported around 45.000 samples in this platform. We downloaded metadata of samples patients, that only included: location, institute, date, type of samples, lineage, and mutations. 
+
+For database limits, is not possible to download all this data at a time, so is necessary to create batches of codes to download all data. After that, we join all tsv files with this information into one using python. 
+
+```{python, results='hide'}
+import os
+import pandas as pd
+
+def listdir_fullpath(d):
+    return [os.path.join(d, f) for f in os.listdir(d)]
+
+files = listdir_fullpath("../GISAID/chile_data/")
+
+all_metadata = []
+for file in files:
+    if file.endswith('.tsv'):
+        metadata = pd.read_csv(file, sep = '\t')
+        all_metadata.append(metadata)
+
+new_df = pd.concat(all_metadata).drop_duplicates()
+sorted_df = new_df.sort_values(by='Accession ID', key=lambda s: s.str[8:].astype(int))
+
+sorted_df.to_csv('GISAID_all_chile.tsv', sep= '\t', index=False)
+```
+
+# Transforming data
+
+Before plotting, is necessary to formatting date data from GISAID and samples we are working on, to facilitate grouping data by month and also to visualize. 
+
+Also is important to label samples with their corresponding name of VOI or VOC, this to know about wich variant correspond to each lineage from GISAID. For this we consult to:
+
+  - https://www.cdc.gov/coronavirus/2019-ncov/variants/variant-classifications.html
+  - https://gisaid.org/hcov19-variants/
+
+```{r data, echo=FALSE}
+#reading data
+all_results <-read.table('all_results.csv', h=TRUE,sep=",")
+metadata = read.table('GISAID_all_chile.tsv', h=TRUE,sep="\t", check.names = FALSE)
+
+#formatting dates
+metadata$Date <-ym(strtrim(metadata$`Collection date`, 7))
+variants <- metadata[,c("Lineage","Date")]
+
+#extracting dates of sampling data
+samples_dates <- ym(strtrim(all_results$analisis_data, 7))
+samples_dates <- na.omit(samples_dates)
+samples_dates <- unique(samples_dates)
+
+#generating table for bar plot
+hist_variants <- variants %>%
+  group_by(Date) %>% 
+  count(Lineage)
+
+#formating lineage info to variant names, some links for manual search of VOI and VOC
+#https://www.cdc.gov/coronavirus/2019-ncov/variants/variant-classifications.html
+#https://gisaid.org/hcov19-variants/
+
+hist_variants <- hist_variants %>%
+  mutate(
+    name = case_when(
+      str_detect(Lineage, "P.2") ~ "Zeta",
+      str_detect(Lineage, "B.1.617.1") ~ "Kappa",
+      str_detect(Lineage, "B.1.526") ~ "Iota",
+      str_detect(Lineage, "B.1.525") ~ "Eta",
+      str_detect(Lineage, "B.1.427|B.1.429") ~ "Epsilon",
+      str_detect(Lineage, "B.1.1.529|BA.2.86|CH.1.1|BA.2.74|^BA.\\d|XBB.1.\\d") ~ "Omicron",
+      str_detect(Lineage, "B.1.617|B.1.617.2|^AY.\\d") ~ "Delta",
+      str_detect(Lineage, "B.1.1.7|^Q.\\d") ~ "Alpha",
+      str_detect(Lineage, "P.1|^P.1.\\d") ~ "Gamma",
+      str_detect(Lineage, "B.1.351|B.1.351.2|B.1.351.3") ~ "Beta",
+      str_detect(Lineage, "C.37|C.37.1") ~ "Lambda",
+      str_detect(Lineage, "B.1.621|B.1.621.1") ~ "Mu",
+      .default = "Other"
+    )
+  )
+
+#calculating percentage of variants in each month
+variant_percentage <- hist_variants %>% 
+  group_by(Date) %>%
+  count(name) %>%
+  mutate(percent = n/sum(n))
+```
+
+# Plotting number of samples and percentage of variants in Chile.
+
+## Number of samples
+
+Here we got the number of samples in Chile from GISAID platform, we label this with their corresponding name of VOI or VOC. With blue arrows we point out where our samples are located on the timeline. Around years 2021 and 2022 there is huge increase in the sequencing of COVID samples in Chile.
+
+
+```{r num_samples, echo=FALSE}
+# Number of samples 
+p1 <- ggplot(hist_variants) + 
+  geom_bar(aes(x=Date, y=n, fill=name), stat="identity") +
+  annotate("segment", x=samples_dates, xend=samples_dates,
+    y=300, yend=2, color="blue4",
+    arrow=arrow(length=unit(0.2,"cm"))) +
+  scale_x_date(date_labels="%m-%Y",date_breaks  ="1 month") +
+  theme_minimal()+
+  xlab("Date") + ylab("# samples") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size = 9))
+p1
+
+ggsave("num_samples_chile.png", dpi=300, dev='png', height=10, width=14, units="cm")
+
+```
+
+## Percentage of variants
+
+In the next graph, we show how the proportion of variants changes throughout the pandemic in Chile. Just like previous graph, variants are colored by their corresponding name of VOI or VOC.
+
+```{r perc_variants, echo=FALSE}
+# variants percentage per month
+p2 <- ggplot(variant_percentage) + 
+  geom_bar(aes(x=Date, y=percent, fill=name), stat="identity") +
+  #  annotate("segment", x=samples_dates, xend=samples_dates,
+  #  y=0.25, yend=0.05, color="blue4",
+  #  arrow=arrow(length=unit(0.2,"cm"))) +
+  scale_x_date(date_labels="%m-%Y",date_breaks  ="1 month") +
+  theme_minimal()+
+  xlab("Date") + ylab("variants(%)") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size = 9))
+
+p2
+
+ggsave("percentage_variant_chile.png", dpi=300, dev='png', height=10, width=12, units="cm")
+
+```
+
