@@ -1,0 +1,57 @@
+	Protein	Domain	Subdomain	Type	Position	Position_End	Original	Observation	Residue	Effect	Reference	Unnamed: 11	Genomic_position
+0	Spike	NTD	N3-N5	N-Glycan	165			N	N165	Modulate structural changes in RBD and strengthen interaction with ACE2.	(Casalino et al., 2020)		22055
+1	Spike	NTD	N3-N5	N-Glycan	234			N	N234	Modulate structural changes in RBD and strengthen interaction with ACE2.	(Casalino et al., 2020)		22262
+2	Spike	NTD	N3-N5	Deletion	140	141.0			140-141	Neutralize antibodies	(Tao et al., 2021); (Weng et al., 2022)		21980
+3	Spike	NTD	N3-N5	Deletion	144				144	Neutralize antibodies	(Tao et al., 2021); (Weng et al., 2022)		21992
+4	Spike	NTD	N3-N5	Deletion	144	145.0			144-145	Neutralize antibodies	(Tao et al., 2021); (Weng et al., 2022)		21992
+5	Spike	NTD	N3-N5	Deletion	146				146	Neutralize antibodies	(Tao et al., 2021); (Weng et al., 2022)		21998
+6	Spike	NTD	N3-N6	Deletion	242	244.0			242-244	Neutralize antibodies	(Tao et al., 2021); (Weng et al., 2022)		22286
+7	Spike	RBD	ACE2	Subtitution	452		L	R	L452R	Neutralize antibodies	(Tao et al., 2021)		22916
+8	Spike	RBD	ACE2	Subtitution	417		K	N	K417N/T	Reduce affinity to ACE2	(Tao et al., 2021)		22811
+9	Spike	RBD	ACE2	Subtitution	417		K	T	K417N/T	Reduce affinity to ACE2	(Tao et al., 2021)		22811
+10	Spike	RBD	ACE2	Subtitution	439			K	N439K	Increase affinity to ACE2	(Tao et al., 2021)		22877
+11	Spike	RBD	ACE2	Subtitution	453		Y	F	Y453F	Increase affinity to ACE2	(Tao et al., 2021)		22919
+12	Spike	RBD	ACE2	Subtitution	477		S	N	S477N	Increase affinity to ACE2	(Tao et al., 2021)		22991
+13	ORF3a	ß1-ß8		Subtitution	223		T	I	T223I	Modulate structural changes in ß7-ß8 coil	(Zhang et al., 2022)		26059
+14	ORF3a	C-terminus		Deletion	256				256	Conserved region interacting with the citoplasm. Mutation might impact interaction.	(Zhang et al., 2022)		26158
+15	ORF3a	C-terminus		Deletion	257				257	Conserved region interacting with the citoplasm. Mutation might impact interaction.	(Zhang et al., 2022)		26161
+16	ORF3a	C-terminus		Subtitution	253		S	P	S253P	Conserved region interacting with the citoplasm. Mutation might impact interaction.	(Zhang et al., 2022)		26149
+17	ORF3a	PBM			273	275.0	SVPL		273-275	Binding site for PDZ proteins in the human cell. Hitchacks the Immune System.	(Zhang et al., 2022)		26209
+18	Envelope	NTD		Subtitution	8		E	K	E8K	Introduces a PKC phosphorylation site	(Jakhmola et al., 2021)		26266
+19	Envelope	TM		Subtitution	9		T	I	T9I	Reduce cellular death. Inhibit MHC-I. Alter homo-pentameric configuration.	(Wang et al., 2023)		26269
+20	Envelope	TM		Subtitution	11		T	A	T11A	Reduce cellular death and citoquine release.	(Wang et al., 2023)		26275
+21	Envelope	TM		Subtitution	20		F	L	F20L	Alter homo-pentameric configuration.	(Mou et al., 2021)		26302
+22	Envelope	TM		Subtitution	21		L	F	L21F	Alter homo-pentameric configuration.	(Mou et al., 2021)		26305
+23	Envelope	TM		Subtitution	24		V	M	V24M	Alter homo-pentameric configuration.	(Mou et al., 2021)		26314
+24	Envelope	TM		Subtitution	30		T	I	T30I	Alter homo-pentameric configuration.	(Mou et al., 2021)		26332
+25	Envelope	TM		Subtitution	36		A	V	A36V	Block ionic channel activity.	(Hassan et al., 2020)		26350
+26	Envelope	TM		Subtitution	26		L	F	L26F	Block ionic channel activity.	(Hassan et al., 2020)		26320
+27	Envelope	TM		Subtitution	37		L	H	L37H	Block ionic channel activity.	(Hassan et al., 2020)		26353
+28	Envelope	TM		Subtitution	39		L	M	L39M	Block ionic channel activity.	(Hassan et al., 2020)		26359
+29	Envelope	CTD		Subtitution	55		S	F	S55F	Narrower active site.	(Mou et al., 2021)		26407
+30	Envelope	CTD		Subtitution	62		V	F	V62F	Narrower active site.	(Mou et al., 2021)		26428
+31	Envelope	CTD		Subtitution	69		R	I	R69I	Narrower active site.	(Mou et al., 2021)		26449
+32	Envelope	CTD		Subtitution	68		S	C	S68C	Change of protein function by stabilizing effect.	(Mou et al., 2021)		26446
+33	Envelope	CTD		Subtitution	71		P	L	P71L	Higher rates of cellular death and increased viral charge.	(Mou et al., 2021; Wang et al., 2023)		26455
+34	Envelope	CTD		Subtitution	68		S	F	S68F	Stabilize protein structure.	(Mou et al., 2021)		26446
+35	Envelope	CTD	PDZ	Subtitution	73		L	F	L73F	DLLV pattern is altered so the Golgi Aparatus goes undetected, affecting infectivity and viral replication.	(Hassan et al., 2020)		26461
+36	Envelope	CTD	PDZ	Subtitution	72		D	Y	D72Y	DLLV pattern is altered so the Golgi Aparatus goes undetected, affecting infectivity and viral replication.	(Hassan et al., 2020)		26458
+37	Membrane	N-terminus		Subtitution	3		D	G	D3G	N-myristoylation. Prominent in South America.	(Jakhmola et al., 2021)		26529
+38	Membrane	N-terminus		Subtitution	10		V	A	V10A	N-myristoylation	(Jakhmola et al., 2021)		26550
+39	Membrane	N-terminus		Subtitution	19		Q	E	Q19E	Reduction of affinity with antibodies specific for this domain (S2M2-30) and increased evasion.	(Tang et al., 2023)		26577
+40	Membrane	TM	TMH2	Subtitution	70		V	L	V70L	Modified glucose transport through the membrane.	(Shen et al., 2021)		26730
+41	Membrane	TM	TMH3	Subtitution	82		I	T	I82T	Modified glucose transport through the membrane.	(Shen et al., 2021)		26766
+42	Membrane	ß-sheet		Subtitution	132		P	S	P132S	New phosphorylation site.	(Jakhmola et al., 2021)		26916
+43	ORF6	AH1-AH2		Deletion	22	30.0			22-30	Shift of the position of the NTD domain in relation to the membrane. Inhibition of function.	(Riojas et al., 2020)		27265
+44	ORF6	CTD		Subtitution	61		D	L	D61L	Reduced interaction with Nup98-Rae1 and therefore reduced evasion of the immune system.	(Kehrer et al., 2022)		27382
+45	ORF6	CTD		Subtitution	54		D	E	D54E	Altered supression of myc-nsp8.	(Hassan et al., 2020b)		27361
+46	ORF6	CTD		Subtitution	56		E	Q	E56Q	Altered supression of myc-nsp8.	(Hassan et al., 2020b)		27367
+47	ORF6	CTD		Subtitution	53		D	G	D53G	Altered supression of myc-nsp8.	(Hassan et al., 2020b)		27358
+48	ORF7a	TMH		Subtitution	105		A	V	A105V	Lower number of secondary pathologies and viral charge. Cases tend to be more catastrophic.	(Lobiuc et al., 2021)		27706
+49	ORF7b			Subtitution	19		F	L	F19L	Alters the retention of ORF7b in the Golgi Aparatus.	(Hassan et al., 2020b)	,	27810
+50	ORF7b			Subtitution	20		L		L20STOP	Loss of function.	(Hassan et al., 2020b)		27813
+51	ORF7b			Subtitution	31		S	P	S31P	Loss of function because of introduced steric clash and alteration on secondary structure.	(Cruz & Medina, 2022)		27846
+52	ORF8			Subtitution	24		S	L	S24L	Increase on protein structural stability, activity and therefore evasion of the Immune System.	(Rashid et al., 2021)		27963
+53	ORF8			Subtitution	45		W	L	W45L	Higher binding stability to IRF3, so increased Immune System evasion capacity.	(Rashid et al., 2021)		28026
+54	ORF8			Subtitution	84		L	S	L84S	Decrease in activity, even though binding capacity to IRF3 is unaffected.	(Rashid et al., 2021)		28143
+55	ORF8			Deletion	27	121.0			27-121	Increased response against the Immune System.	(DeRonde et al., 2022)		27972
