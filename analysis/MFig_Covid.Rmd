@@ -1,0 +1,310 @@
+---
+title: "Covid Figures"
+author: "Alex Di Genova"
+output: rmarkdown::github_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Figure 1
+Demographic of sequenced COVID samples.
+## Chilean map
+
+Map of Chile hihglithing the Rancagua y Santiago regions
+```{r chimap, echo=FALSE}
+# Cargar los paquetes necesarios
+library(ggplot2)
+library(rnaturalearth)
+
+# Obtener los datos geográficos de Chile
+chile_map <- ne_countries(country = "chile", returnclass = "sf")
+
+# Coordenadas aproximadas de Santiago y Rancagua
+locations <- data.frame(
+  city = c("Santiago", "Rancagua"),
+  lon = c(-70.6483, -70.7398),
+  lat = c(-33.4569, -34.1708)
+)
+
+# Crear el mapa utilizando ggplot2 y resaltar Santiago y Rancagua
+p1=ggplot(data = chile_map) +
+  geom_sf() +
+  geom_point(data = locations, aes(x = lon, y = lat, color = city), size = 3) +
+  scale_color_manual(values = c("Santiago" = "blue", "Rancagua" = "red")) +
+  ggtitle("Chile") +
+  theme_minimal() +
+  theme(text = element_text(size = 12), legend.position = "none",  axis.text.x=element_blank()) +
+  labs(color = "Ciudad")
+p1
+```
+
+## Demographic of samples
+
+```{r demog}
+df=read.table("../demographics/all_samples.txt", h=T)
+dates_formatted <- as.Date(df$Date, format="%m/%d/%Y")
+years <- format(dates_formatted, "%Y")
+df$year=years
+```
+we make the plot
+
+```{r demogp}
+library(tidyverse)
+library(ggbeeswarm)
+count_data <- df %>%
+  group_by(year) %>%
+  summarise(count = n())
+
+p2=ggplot(df, aes(x = year, y = Age, )) +
+     #geom_boxplot(aes(group = year), color="brown", alpha = 0.5) + # Add boxplot
+  geom_quasirandom(aes(color = Region, shape = Sex),width = 0.25, height = 0, size=3) +
+  # geom_beeswarm(aes(color = Region, shape = Sex),width = 0.25, height = 0, size=3) +
+   #geom_jitter(, width = 0.2, height = 0) +
+  scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) +
+  labs(title = "Samples",
+       x = "Year",
+       y = "Age") +
+    theme(text = element_text(size = 12)) +
+  theme_minimal()
+p2
+```
+
+
+## GISAD
+
+```{r data, echo=FALSE}
+#reading data
+all_results <-read.table('all_results.csv', h=TRUE,sep=",")
+metadata = read.table('GISAID_all_chile.tsv', h=TRUE,sep="\t", check.names = FALSE)
+
+#formatting dates
+metadata$Date <-ym(strtrim(metadata$`Collection date`, 7))
+variants <- metadata[,c("Lineage","Date")]
+
+#extracting dates of sampling data
+samples_dates <- ym(strtrim(all_results$analisis_data, 7))
+samples_dates <- na.omit(samples_dates)
+samples_dates <- unique(samples_dates)
+
+#generating table for bar plot
+hist_variants <- variants %>%
+  group_by(Date) %>% 
+  count(Lineage)
+
+#formating lineage info to variant names, some links for manual search of VOI and VOC
+#https://www.cdc.gov/coronavirus/2019-ncov/variants/variant-classifications.html
+#https://gisaid.org/hcov19-variants/
+
+hist_variants <- hist_variants %>%
+  mutate(
+    name = case_when(
+      str_detect(Lineage, "P.2") ~ "Zeta",
+      str_detect(Lineage, "B.1.617.1") ~ "Kappa",
+      str_detect(Lineage, "B.1.526") ~ "Iota",
+      str_detect(Lineage, "B.1.525") ~ "Eta",
+      str_detect(Lineage, "B.1.427|B.1.429") ~ "Epsilon",
+      str_detect(Lineage, "B.1.1.529|BA.2.86|CH.1.1|BA.2.74|^BA.\\d|XBB.1.\\d") ~ "Omicron",
+      str_detect(Lineage, "B.1.617|B.1.617.2|^AY.\\d") ~ "Delta",
+      str_detect(Lineage, "B.1.1.7|^Q.\\d") ~ "Alpha",
+      str_detect(Lineage, "P.1|^P.1.\\d") ~ "Gamma",
+      str_detect(Lineage, "B.1.351|B.1.351.2|B.1.351.3") ~ "Beta",
+      str_detect(Lineage, "C.37|C.37.1") ~ "Lambda",
+      str_detect(Lineage, "B.1.621|B.1.621.1") ~ "Mu",
+      .default = "Other"
+    )
+  )
+
+#calculating percentage of variants in each month
+variant_percentage <- hist_variants %>% 
+  group_by(Date) %>%
+  count(name) %>%
+  mutate(percent = n/sum(n))
+```
+
+## Plotting number of samples and percentage of variants in Chile.
+
+## Number of samples
+
+Here we got the number of samples in Chile from GISAID platform, we label this with their corresponding name of VOI or VOC. With blue arrows we point out where our samples are located on the timeline. Around years 2021 and 2022 there is huge increase in the sequencing of COVID samples in Chile.
+
+
+```{r num_samples, echo=FALSE}
+# Number of samples 
+p3 <- ggplot(hist_variants) + 
+  geom_bar(aes(x=Date, y=n, fill=name), stat="identity") +
+  annotate("segment", x=samples_dates, xend=samples_dates,
+    y=1000, yend=2, color="red",
+    arrow=arrow(length=unit(0.4,"cm"))) +
+  scale_x_date(date_labels="%Y",date_breaks  ="1 year") +
+  theme_minimal()+
+  labs(title = "GISAD Chilean Genomes",
+       x = "Date",
+       y = "# Covid Genomes",
+       fill = "Variants") +
+  theme(text = element_text(size = 12))
+  #theme(text = element_text(size = 12), legend.position = "bottom")
+p3
+```
+
+We compose all plots to generate figure 1
+
+```{r cmposer}
+
+library(patchwork)
+
+patchwork=p1|(p2/p3)  
+patchwork + plot_annotation(tag_levels = 'A')
+pdf(file="Fig1.pdf",height=7,width=9)
+patchwork + plot_annotation(tag_levels = 'A')
+dev.off()
+
+```
+
+
+# Figure 2
+
+Philogenetics, variants detected and coverage.
+
+## Phylogenetic tree
+```{r readdata,echo=FALSE}
+#BiocManager::install("treeio")
+#BiocManager::install("ggtree")
+
+suppressMessages(library('treeio'))
+suppressMessages(library('ggtree'))
+suppressMessages(library(phytools))
+
+all_results <- read.table(file='all_results.csv', sep=',', h=TRUE)
+
+my_tree <- read.newick('../Phylogenetics/iqtree2.treefile')
+rerooted_tree <- reroot(my_tree, node.number = 1)
+#transforming tree to add variant information
+x <- as_tibble(rerooted_tree)
+#formatting sample name
+x$sampleId <- paste0('sample_',(str_extract(x$label,"(?<=-)\\d+")))
+#keeping name of reference
+x <- x %>% 
+  mutate(sampleId = ifelse(label == 'MN908947',label,sampleId))
+#joining data
+x_new <- treeio::full_join(x,all_results[c('sampleId', 'location', 'variant')], by="sampleId")
+#transforming data into a tree object again!
+x_new <- as.treedata(x_new)
+#we rename the tips
+a=x_new@phylo$tip.label
+a=paste0('sample_',(str_extract(a,"(?<=-)\\d+")))
+a[1]="MN908947"
+x_new@phylo$tip.label=a
+variant <- setNames(RColorBrewer::brewer.pal(name = "Dark2", n = length(unique(all_results$variant))), unique(all_results$variant))
+
+ivar_results <- as.matrix(read.table('ivar_results.tsv', 
+                           h=TRUE,sep="\t", check.names = FALSE, row.names = 1))
+#deleting sample 71
+ivar_results <- ivar_results[-71,]
+
+pos_order=as.character(sort(as.numeric(colnames(ivar_results))))
+#sort by coordinate
+ivar_sor=ivar_results[,pos_order]
+ivdt=as.data.frame(ivar_sor)
+ivdt$name=rownames(ivdt)
+ivdt_longer=ivdt%>%pivot_longer(!name, names_to = "pos", values_to = "snp") %>% mutate(pos=as.numeric(pos)) %>% filter(snp==1)
+a=rowSums(ivar_results)
+ivar_c=data.frame(name=names(a),value=a)
+
+```
+
+We plot the tree including variants type, iVAR snp distribution and number of SNPs
+
+
+```{r plott}
+
+library(ggtree)
+
+# Customize further as needed
+p4 <- ggtree(x_new, color="grey40", ladderize = TRUE) +
+  #xlim_tree(0.00325) +
+  geom_tiplab(aes(color=variant, label = sampleId), size=2.) +
+  scale_color_manual('', values = variant) +
+  scale_fill_manual('', values = variant) +
+  guides(color = guide_legend(override.aes = list(size = 5, label = "\u25AA")))+
+  theme_tree2(legend.position = "bottom")
+
+# add SNP data by position in the tree
+p5= p4 + geom_facet(panel = "SNPs coordinates", data = ivdt_longer, geom = geom_point, 
+               mapping=aes(x = pos,group=sampleId, color=variant,fill=variant), shape = '|') +
+             geom_facet(panel = "# SNPs", data = ivar_c, geom = geom_col, 
+                aes(x = value, color = variant, fill=variant), orientation = 'y', width = .6)
+p5
+
+#facet_widths(p8, widths = c(2, 2, 1))
+pdf(file="Fig2.pdf",height=7,width=9)
+facet_widths(p5, widths = c(2, 2, 1))
+dev.off()
+```
+
+
+
+
+# Figure 3
+
+Genome coverage
+
+## Samtools depth 
+
+Checking depth of the samples and separate them by variant and location.
+
+```{r, loadsamtools, echo=TRUE}
+suppressMessages(library('reshape2'))
+samtools_results <-read.table('samtools_depth.csv', h=TRUE,sep=",")
+samtools_results <- melt(samtools_results, id="X")
+colnames(samtools_results) <- c('pos', 'sampleId', 'depth')
+
+samtools_results <- left_join(samtools_results,all_results[c('sampleId', 'location', 'variant')], by="sampleId")
+samtools_results<-samtools_results[!grepl("71", samtools_results$sample),]
+
+samtools_results <- samtools_results %>% group_by(variant)
+
+samtools_results <- samtools_results %>% group_by(variant) %>%
+  mutate(med = mean(depth, na.rm = TRUE))
+
+samtools_depth_range <- samtools_results %>%
+  group_by(sampleId, grp = cut(pos, breaks=pretty(pos, n = 60), dig.lab = 5),  variant, med) %>% 
+  summarise(count = mean(depth, na.rm = TRUE))
+```
+
+### Samtools depth plot
+```{r, depth, echo=FALSE}
+
+
+
+p6 <- ggplot(samtools_depth_range , aes(x = grp, y=log(count),  
+                                     colour = variant)) +
+  geom_line(aes(group = sampleId), linewidth = 0.3, alpha = 0.8)+
+  #geom_hline(yintercept = log(100),color="red2",
+   #          linetype='dotted',linewidth=0.5) + 
+  #annotate("text", x = 45, y = log(100), label = "100X Coverage", vjust = -0.5, size=2) +
+  ylim(8,14)+
+  scale_x_discrete(labels=as.character(seq(0,30000,500)))+
+  facet_grid(rows = vars(variant),scales="fixed") +
+  scale_color_manual('', values = variant) +
+  geom_hline(aes(yintercept = log(med), group=variant), 
+             colour = 'darkblue', size =0.6, linetype='dashed') +
+  geom_text(aes(y = log(med), x = 45, label = paste(round(med),"X Coverage"), 
+                group=variant),
+                vjust = -0.6, size=4, color='gray40') + 
+    theme_minimal() + 
+  xlab("Position range (pb)") + ylab("Depth (log)") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size = 5), legend.position = "bottom")
+
+p6
+
+pdf(file="Fig3.pdf",height=7,width=7)
+p6
+dev.off()
+```
+
+
+# Figure 4
+
+Heterogeneity analysis
