@@ -305,6 +305,26 @@ dev.off()
 ```
 
 
+
 # Figure 4
 
 Heterogeneity analysis
+
+
+```{r bdata}
+library(tidyverse)
+dh=read.table("summary_het2.txt",h=F)
+dh$V1=paste0('sample_',(str_extract(dh$V1,"(?<=-)\\d+")))
+dh=left_join(dh,all_results,by=c("V1"="sampleId"))
+dh=dh %>% mutate(age2=if_else(age < 30,"young",if_else(age >=30 & age<50,"adult","older"))) %>%  mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)]","Omicron",variant)) %>%remove_missing()
+
+#count the number of position with ITH
+dh$het=dh$V4+dh$V6
+
+#run the lm
+a=lm(dh$het~dh$age2+dh$mut_ivar+dh$variant)
+summary(a)
+
+#ggplot(dh, aes(y=het,x=age2,color=variant,group=age2))  + geom_boxplot() + geom_quasirandom()
+
+```

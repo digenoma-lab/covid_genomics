@@ -1,0 +1,153 @@
+---
+title: "Statistical Analysis COVID19"
+author: "Pastor Jullian"
+date: "2024-02-28"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Statistical analysis COVID-19
+
+Analysis to identify regions of the SARS-CoV-2 genome that are different between groups.
+
+#### Load libraries
+
+```{r, message=FALSE}
+library("ggpubr")
+library('ggplot2')
+library("dplyr")
+```
+
+### Data input
+#### Numeric to factors:
+From `mydata`, we want to modify columns into factors, with the exception of `value` column.
+We also add a `window` column.
+
+```{r}
+mydata <- read.table('./heterogeneity_groups.csv', h=TRUE,sep=",", row.names = 1)
+mydata <- mydata %>%
+  mutate(across(where(is.character), as.factor))
+mydata$window <- as.factor(1:30)
+str(mydata)
+
+```
+
+### Data explaration and visualisation
+
+```{r echo=FALSE}
+# Plot
+ggplot(mydata, aes(x = window, y = value, col = label))+
+  geom_boxplot(width=0.7, position=position_dodge(width = 0.7))
+
+# Density plot 
+ggdensity(mydata$value, main = "Density plot",
+          xlab = "Value")
+
+# QQ plot
+ggqqplot(mydata$value)
+
+# Normality test
+shapiro.test(mydata$value)
+
+```
+### Normalisation and lineal model
+
+```{r eval=FALSE}
+
+## Normalization
+# 1. Log
+mydata$logscale <- log(mydata$value)
+shapiro.test(mydata$logscale)
+
+# 2. Mean = 0  
+mydata$scaled <- (mydata$value - mean(mydata$value)) / sd(mydata$value)
+shapiro.test(mydata$scaled) 
+
+## Linear model using:
+# Raw values
+lm1 <- 
+  mydata %>% group_by(window) %>% 
+  do(lm = summary(lm(value ~ label,data = .)))
+
+# Log adjusted values
+lm2 <- 
+  mydata %>% group_by(window) %>% 
+  do(lm = summary(lm(logscale ~ label,data = .)))
+
+# Scaled values
+lm3 <- 
+  mydata %>% group_by(window) %>% 
+  do(lm = summary(lm(scaled ~ label,data = .)))
+
+```
+### Adjustment for multiple comparison
+1. First extract the p-values
+2. Estimate FDR
+3. Identify the significant comparison
+
+```{r eval=FALSE}
+
+# 1. Function to extract p-values
+fun1 <- function(model){
+pv <- list()
+for (i in 1:dim(model)[1]) {
+  pv[[i]] <- model$lm[[i]]$coefficients[,4]
+  }
+return(pv)
+}
+
+# 2. Function to estimate FDR
+fun2 <- function(model){
+    ad <- vector('list', length(model))
+    for (i in 1:length(model)) {
+    for (j in 1:3) {
+      ad[[i]][j] <- p.adjust(model[[i]][j], "fdr",n = 3)
+  }
+  }
+  return(ad)
+}
+
+# 3. Find the significant
+fun3 <- function(model,cutoff){
+bl <- list()
+for (i in 1:length(model)) {
+  bl[[i]] <- model[[i]] <= cutoff
+  }
+return(bl)
+}
+
+## FDR for:
+
+# 1. Raw values
+out1 <- fun1(lm1)
+out2 <- fun2(out1)
+out_raw <- fun3(out2,0.05)
+
+# Significant windows: 29 and 30
+
+# 2. Log values
+out1 <- fun1(lm2)
+out2 <- fun2(out1)
+out_log <- fun3(out2,0.05)
+
+# Significant windows: 23,27, 28, 29 and 30
+
+# 3. Scale values
+out1 <- fun1(lm3)
+out2 <- fun2(out1)
+out_scale <- fun3(out2,0.05)
+
+# Significant windows: 29 and 30
+
+```
+### Result
+
+From the results, we can see that groups from window 29 and 30 are significantly different, either using raw values or scaled values.
+
+
+  

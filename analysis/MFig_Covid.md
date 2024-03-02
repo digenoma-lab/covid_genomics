@@ -1,7 +1,7 @@
 Covid Figures
 ================
 Alex Di Genova
-2024-02-28
+2024-03-02
 
 # Figure 1
 
@@ -317,3 +317,52 @@ samtools_depth_range <- samtools_results %>%
 # Figure 4
 
 Heterogeneity analysis
+
+``` r
+library(tidyverse)
+dh=read.table("summary_het2.txt",h=F)
+dh$V1=paste0('sample_',(str_extract(dh$V1,"(?<=-)\\d+")))
+dh=left_join(dh,all_results,by=c("V1"="sampleId"))
+dh=dh %>% mutate(age2=if_else(age < 30,"young",if_else(age >=30 & age<50,"adult","older"))) %>%  mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)]","Omicron",variant)) %>%remove_missing()
+```
+
+    ## Warning: Removed 2 rows containing missing values.
+
+``` r
+#count the number of position with ITH
+dh$het=dh$V4+dh$V6
+
+#run the lm
+a=lm(dh$het~dh$age2+dh$mut_ivar+dh$variant)
+summary(a)
+```
+
+    ## 
+    ## Call:
+    ## lm(formula = dh$het ~ dh$age2 + dh$mut_ivar + dh$variant)
+    ## 
+    ## Residuals:
+    ##      Min       1Q   Median       3Q      Max 
+    ## -195.647  -67.468   -5.096   55.407  305.431 
+    ## 
+    ## Coefficients:
+    ##                   Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept)        590.365    112.643   5.241 1.17e-06 ***
+    ## dh$age2older         1.661     25.769   0.064  0.94876    
+    ## dh$age2young       -51.137     25.694  -1.990  0.04981 *  
+    ## dh$mut_ivar         -4.945      1.709  -2.894  0.00484 ** 
+    ## dh$variantEpsilon  -20.318    145.178  -0.140  0.88903    
+    ## dh$variantGamma    -61.479    109.149  -0.563  0.57476    
+    ## dh$variantLambda   -61.929    103.711  -0.597  0.55203    
+    ## dh$variantOmicron  112.733    113.185   0.996  0.32211    
+    ## dh$variantOther   -140.196    105.567  -1.328  0.18777    
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 100.3 on 84 degrees of freedom
+    ## Multiple R-squared:  0.1605, Adjusted R-squared:  0.08054 
+    ## F-statistic: 2.007 on 8 and 84 DF,  p-value: 0.05524
+
+``` r
+#ggplot(dh, aes(y=het,x=age2,color=variant,group=age2))  + geom_boxplot() + geom_quasirandom()
+```
