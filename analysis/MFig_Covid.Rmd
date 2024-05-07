@@ -43,10 +43,13 @@ p1
 ## Demographic of samples
 
 ```{r demog}
+library(tidyverse)
 df=read.table("../demographics/all_samples.txt", h=T)
 dates_formatted <- as.Date(df$Date, format="%m/%d/%Y")
 years <- format(dates_formatted, "%Y")
 df$year=years
+df=df %>% mutate(Ct=as.integer(Ct))
+df$all="all"
 ```
 we make the plot
 
@@ -69,6 +72,12 @@ p2=ggplot(df, aes(x = year, y = Age, )) +
     theme(text = element_text(size = 12)) +
   theme_minimal()
 p2
+
+# Ct plots 2.1
+#ggplot(df, aes(x=all,shape=Sex,y=Ct,color=Region,group=all)) + geom_quasirandom() + theme_minimal()
+# Ct plots 2.2
+#ggplot(df, aes(x=Age,shape=Sex,y=Ct,color=Region,group=all)) + geom_point() + theme_minimal()
+
 ```
 
 
@@ -196,7 +205,8 @@ a=x_new@phylo$tip.label
 a=paste0('sample_',(str_extract(a,"(?<=-)\\d+")))
 a[1]="MN908947"
 x_new@phylo$tip.label=a
-variant <- setNames(RColorBrewer::brewer.pal(name = "Dark2", n = length(unique(all_results$variant))), unique(all_results$variant))
+variant <- setNames(RColorBrewer::brewer.pal(name = "Dark2", n = length(unique(c(all_results$variant,"Co-Infection")))),
+                    unique(c(all_results$variant,"Co-Infection")))
 
 ivar_results <- as.matrix(read.table('ivar_results.tsv', 
                            h=TRUE,sep="\t", check.names = FALSE, row.names = 1))
@@ -310,21 +320,227 @@ dev.off()
 
 Heterogeneity analysis
 
+## SNVs
 
-```{r bdata}
+```{r loadsnv}
 library(tidyverse)
-dh=read.table("summary_het2.txt",h=F)
-dh$V1=paste0('sample_',(str_extract(dh$V1,"(?<=-)\\d+")))
-dh=left_join(dh,all_results,by=c("V1"="sampleId"))
-dh=dh %>% mutate(age2=if_else(age < 30,"young",if_else(age >=30 & age<50,"adult","older"))) %>%  mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)]","Omicron",variant)) %>%remove_missing()
+csv_files <- list.files(pattern="*.variants.tsv",path = "../SNVs/")
+l_data <- list()
+for (file in csv_files) {
+  data <- read.table(paste0("../SNVs/",file),h=T)
+  #data <- data %>% filter(ALT_FREQ >=0.95)
+  data$Filename <- file
+  l_data[[file]] <- data
+}
+SNV_ivar <- bind_rows(l_data)
+SNV_ivar$barcode=as.integer(str_extract(SNV_ivar$Filename,"(?<=-)\\d+"))
+```
 
-#count the number of position with ITH
-dh$het=dh$V4+dh$V6
+## iSNVs
 
-#run the lm
-a=lm(dh$het~dh$age2+dh$mut_ivar+dh$variant)
-summary(a)
+loading a cleaning iSNV data, our filters include ALT_FREQ in [0.05 to 0.95], ALT_quality > 30, ALT_DP >100 as well as virus load <= 28, and no co-infection.
 
-#ggplot(dh, aes(y=het,x=age2,color=variant,group=age2))  + geom_boxplot() + geom_quasirandom()
+```{r loadisnvs}
+csv_files <- list.files(pattern="*_variants.tsv",path = "../iSNVs/")
+filtered_data <- list()
+for (file in csv_files) {
+  data <- read.table(paste0("../iSNVs/",file),h=T)
+  dataf=data %>% filter(ALT_DP >=100) %>% filter(PASS=="TRUE")%>% filter(ALT_FREQ >= 0.05 & ALT_FREQ<0.95 & ALT_QUAL > 30)
+  dataf$Filename <- file
+  filtered_data[[file]] <- dataf
+}
+
+iSNVs <- bind_rows(filtered_data)
+iSNVs$barcode=as.integer(str_extract(iSNVs$Filename,"(?<=-)\\d+"))
+#we remove all variants calls by ivar in the same sample/position
+iSNVs=iSNVs %>% filter(!paste0(barcode,POS,ALT) %in% paste0(SNV_ivar$barcode,SNV_ivar$POS,SNV_ivar$ALT))
+
+iSNVs_count = iSNVs %>%group_by(Filename) %>% count()
+iSNVs_count$barcode=as.integer(str_extract(iSNVs_count$Filename,"(?<=-)\\d+"))
+iSNV_data=left_join(iSNVs_count,df) %>% mutate(age2=if_else(Age < 30,"young",if_else(Age >=30 & Age<50,"adult","older")))
+
+b=all_results %>% mutate(barcode=as.integer(str_extract(sampleId,"(?<=_)\\d+")))  %>% select(barcode,mut_ivar,variant)
+iSNV_data=left_join(iSNV_data,b)
+iSNV_data=iSNV_data %>% mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)]","Omicron",variant))
+
+# Ct <= 28
+iSNV_data=iSNV_data%>% filter(Ct<=28)
+# filtro de Co-infection muestras con mayor de 3% de por mas de otra variante
+ff=read.table("aggregated-freyja-parse.tsv",h=T,sep="\t")
+fff=ff%>%filter(percentage*100 > 3) %>%select(file) %>% group_by(file) %>% count() %>% filter(n>1)
+fff$barcode=as.integer(str_extract(fff$file,"(?<=-)\\d+"))
+iSNV_coi=iSNV_data %>% filter(barcode %in% fff$barcode)
+iSNV_data=iSNV_data %>% filter(!barcode %in% fff$barcode)
+iSNV_coi$variant="Co-Infection"
+iSNV_data=rbind(iSNV_data,iSNV_coi)
+# load coverage data
+gcov=read.table("resume_samtools_coverage.txt",h=T)
+gcov=gcov %>% mutate(barcode=as.integer(str_extract(sname,"(?<=-)\\d+"))) %>% select(barcode,meandepth,coverage) %>%mutate(logc=log10(meandepth))
+iSNV_data=left_join(iSNV_data,gcov)
+iSNV_coi=left_join(iSNV_coi,gcov)
+
+# we filter the iSNVs position relative to the samples filtered in the previos steps
+iSNVs=iSNVs %>% filter(barcode %in% iSNV_data$barcode)
+iSNVs=left_join(iSNVs,iSNV_data %>% select(barcode,variant,Sex,meandepth), by=c("barcode"="barcode"))
+```
+
+### Regression model
+
+```{r}
+iSNVlm=lm(iSNV_data$n~iSNV_data$age2+iSNV_data$Sex
+          +iSNV_data$mut_ivar+iSNV_data$variant)
+summary(iSNVlm)
+```
+
+We test the mean between groups comparison according to values
+```{r figsnvs}
+# we start with the ones that are significant or relevants
+library(ggpubr)
+library(patchwork)
+## sex 
+my_comparisons <- list( c("F", "M"))
+sexp <- ggboxplot(iSNV_data, x = "Sex", y = "n",
+          color = "Sex", palette = "jco",
+          add = "jitter")
+#  Add p-value
+sexp= sexp  + stat_compare_means( comparisons = my_comparisons, aes(label = ..p.signif..)) + 
+  labs(y="iSNVs") +
+  ylim(30,150)+
+  theme(legend.position = "none")
+
+## variant with more than 10 cases
+mvars=c("Lambda","Omicron","Other","Co-Infection")
+iSNV_data_tmp=iSNV_data %>% filter(variant %in% mvars)
+my_comparisons <- list(
+  c("Lambda", "Omicron"), c("Other", "Lambda"), c("Omicron","Other"), c("Co-Infection","Omicron"),
+  c("Co-Infection","Other"),c("Co-Infection","Lambda"))
+varp=ggboxplot(iSNV_data_tmp, x = "variant", y = "n",
+          color = "variant", palette = "jco", add = "jitter")+ 
+  scale_color_manual('', values = variant) +
+  stat_compare_means(comparisons = my_comparisons, exact = FALSE)+ # Add pairwise comparisons p-value
+  #stat_compare_means(label.y = 80) + 
+  labs(y="",x="Variant")    +ylim(30,150)+ theme(legend.position = "none")  # Add global p-value
+
+##Age group comparison
+my_comparisons <- list( c("young", "adult"), c("young", "older"), c("older", "adult") )
+agep=ggboxplot(iSNV_data, x = "age2", y = "n",
+          color = "age2", palette = "jco", add = "jitter")+ 
+  #scale_color_manual('', values = variant) +
+  stat_compare_means(comparisons = my_comparisons, exact = FALSE, aes(label = ..p.signif..))+ # Add pairwise comparisons p-value
+ # stat_compare_means(label.y = 80) + 
+  ylim(30,150)+labs(y="",x="Age")  + theme(legend.position = "none")   # Add global p-value
+
+piSNVs<-sexp + agep + varp
+piSNVs
+```
+
+
+Distribution and impact plots
+
+```{r iSNVdist}
+#library(gggenes)
+#ggplot()+geom_gene_arrow(data=covid19_gene,aes(xmin=start,xmax=end,y=genome,fill=geneName))+scale_fill_brewer(palette = "Set3")+theme_genes()
+# iSNVs%>% filter(variant %in% mvars) %>% ggplot(aes(x=POS,fill=variant))+
+#   geom_histogram(binwidth=100,position="stack")+
+#   scale_fill_manual('', values = variant) +
+#   theme_classic()+
+#   theme(legend.position = "bottom") + 
+#   facet_grid(variant~.) +
+#   labs(y="iSNVs")
+```
+
+alternative working with windows
+
+```{r isnvw}
+
+# iSNVsw = transform(iSNVs, W = cut(iSNVs$POS,seq(0, 30000, 1000), labels = FALSE))
+# wiSNVc = iSNVsw %>% group_by(W,barcode) %>% summarize(n=n())
+# wiSNVc = left_join(wiSNVc,iSNV_data %>%select(barcode,variant),by=c("barcode"="barcode"))
+# 
+# wiSNVc = wiSNVc %>% filter(variant %in% mvars)
+# 
+# ggplot(wiSNVc, aes(x = factor(W), y = n, fill = variant,color=variant))+
+#   #geom_boxplot(width=0.7, position=position_dodge(width = 0.7))+
+#   geom_col(position=position_dodge())+
+#   #ylim(0,6)+
+#   theme_classic()
+
+tmp=iSNVs %>% filter(variant %in% mvars) %>% select(barcode,variant) %>% unique() %>% arrange(variant)
+tmp2=iSNVs %>% filter(variant %in% mvars)
+tmp2$barcode=factor(tmp2$barcode,levels=tmp$barcode)
+
+p2=tmp2 %>% ggplot(aes(x=POS,y=barcode,color=variant)) + geom_point(shape="|",size=7) +  scale_color_manual('', values = variant) +
+  scale_x_continuous(breaks = seq(0,30000,3000)) +
+  theme_classic() + labs(x="Genome position",y="samples") + theme(legend.position = "bottom")
+
+#second plot with samples count
+
+d=iSNVs %>% filter(variant %in% mvars) %>% select(POS,barcode) %>% group_by(POS,barcode) %>% unique() %>% group_by(POS) %>% summarize(n=n()) 
+p3=d%>% ggplot(aes(x=POS,y=n)) + geom_point(color=ifelse(d$n > 61,"orange", "grey")) + geom_segment( aes(x=POS, xend=POS, y=0, yend=n), color=ifelse(d$n > 61,"orange", "grey")) +theme_classic() + labs(x="Genome position",y="shared iSNV") +  theme(axis.text.x = element_blank(),axis.title.x = element_blank())
+
+patg<-p3/p2 +  plot_layout(heights = c(1,3))
+piSNVs/patg
+```
+
+Mutation types distribution and count 
+
+```{r aleles}
+library(ggridges)
+tmp=iSNVs %>% select("REGION","POS","REF", "ALT","ALT_FREQ") %>% mutate(allele=paste0(REF,"->",ALT))
+
+tmp$allele=factor(tmp$allele,levels=names(sort(table(tmp$allele))))
+
+p1=tmp %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_density_ridges() + theme_ridges(center_axis_labels=TRUE) + theme(legend.position = "none") + labs(x="Frequency", y="Mutation types")
+
+p2=tmp %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_col() + theme_ridges(center_axis_labels=TRUE) + theme(legend.position = "none",axis.text.y = element_blank(),axis.title.y = element_blank()) + labs(x="Count") 
+
+p1+p2 + plot_layout(widths = c(3,1))
+```
+
+Mutation impact and Dn/Ds per gene in samples
+
+### running dndscv on covid data
+
+```{r dndscovid}
+library(dndscv)
+#sampleID chr      pos ref mut
+names <- c(sampleID="barcode", chr="REGION", pos="POS",ref="REF",mut="ALT")
+omicron=iSNVs %>% filter(variant=="Omicron") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+other=iSNVs %>% filter(variant=="Other") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+Lambda=iSNVs %>% filter(variant=="Lambda") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+Coi=iSNVs %>% filter(variant=="Co-Infection") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+
+# we run the dnds analisys 
+dnds_omi = dndscv(omicron, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_oth = dndscv(other, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_lam = dndscv(Lambda, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_coi = dndscv(Coi, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+
+a=dnds_oth$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Other")
+b=dnds_lam$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Lambda")
+c=dnds_omi$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Omicron")
+d=dnds_coi$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Co-Infection")
+
+bb=rbind(a,b,c,d) %>% ggplot(aes(y=gene_name,x=wmis_cv,color=var,group=var))  + geom_point(size=2)+ 
+   geom_vline(xintercept = 1) +labs(y="Genes",x="dnds missense")+ xlim(0,7)+
+  #coord_flip()+
+  scale_color_manual('', values = variant) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 90))
+
+
+global_dnds=rbind(dnds_oth$globaldnds[1,],
+                  dnds_lam$globaldnds[1,],
+                  dnds_omi$globaldnds[1,],
+                  dnds_coi$globaldnds[1,])
+global_dnds$name=c("Other","Lambda","Omicron","Co-Infection")
+global_dnds$name=factor(global_dnds$name,levels=c("Other","Lambda","Omicron","Co-Infection"))
+cc=global_dnds %>% ggplot(aes(x=name,y=mle,color=name)) + geom_point() + geom_pointrange(aes(ymin = cilow, ymax = cihigh)) +scale_color_manual('', values = variant) + theme_minimal() + labs(y="Global dn/ds missens mutations (MLE)",x="") + coord_flip() +theme(legend.position = "none") 
+
+cc|bb
+#sel_cv  %>% select(gene_name, n_syn, n_mis) %>% pivot_longer(-gene_name) %>% ggplot(aes(y=gene_name,x=value/23,fill=name)) + geom_col(position = position_dodge())
+# dnds_omi$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
+# dnds_oth$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
+# dnds_lam$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
 
 ```
+
