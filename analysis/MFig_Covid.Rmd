@@ -382,6 +382,10 @@ iSNV_coi=left_join(iSNV_coi,gcov)
 # we filter the iSNVs position relative to the samples filtered in the previos steps
 iSNVs=iSNVs %>% filter(barcode %in% iSNV_data$barcode)
 iSNVs=left_join(iSNVs,iSNV_data %>% select(barcode,variant,Sex,meandepth), by=c("barcode"="barcode"))
+
+
+# improve co-infection panel plot
+#pfrya=ff %>% mutate(variant=if_else(str_detect(variant,"Omicron"),"Omicron",variant)) %>% filter(percentage*100 > 3)%>% ggplot(aes(x=file,y=percentage,fill=variant)) + geom_col() + theme_minimal() + labs(x="Samples", y="% variant") + theme( axis.text.x=element_blank())
 ```
 
 ### Regression model
