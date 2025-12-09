@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Demographic of sequenced COVID samples.
 ## Chilean map
 
-Map of Chile hihglithing the Rancagua y Santiago regions
+Map of Chile highlithing the Rancagua y Santiago regions
 ```{r chimap, echo=FALSE}
 # Cargar los paquetes necesarios
 library(ggplot2)
@@ -171,6 +171,76 @@ dev.off()
 
 ```
 
+# Supplementary Figure 1
+
+Details about the sequenced reads, including number of reads per sample, read length and read quality, adaptor sequence content ect.
+
+```{r supf1}
+library(ggbeeswarm)
+library(tidyverse)
+mq_jfc = read.table('../figure_qc/join_flow_cells/multiqc_samtools_stats.txt', header = TRUE)
+mq_jfc$barcode=as.integer(str_extract(mq_jfc$Sample,"(?<=-)\\d+"))
+mq_jfc=left_join(mq_jfc,df,by=c("barcode"="barcode"))
+mq_jfc = mq_jfc %>% dplyr::select(Sample,
+                           raw_total_sequences,
+                           error_rate,average_quality,
+                           insert_size_average,
+                           reads_mapped_percent,
+                           reads_properly_paired_percent,
+                           reads_unmapped_percent,
+                           Ct)
+mq_jfc = mq_jfc %>% mutate(raw_total_sequences=raw_total_sequences/1000000)
+order_fct=c("Ct",
+            "raw_total_sequences",
+            "average_quality",
+            "insert_size_average",
+            "reads_mapped_percent",
+            "reads_unmapped_percent",
+            "reads_properly_paired_percent",
+            "error_rate")
+order_fct_r=c("PCR Ct",
+              "Raw total reads (M)", 
+              "Average read quality (Q-score)",
+              "Insert size average (bp)" ,
+              "Reads mapped (%)",
+              "Reads unmapped (%)",
+              "Read properly paired (%)",
+              "Error rate (%)")
+colors <- setNames(RColorBrewer::brewer.pal(name = "Dark2", n =8),order_fct_r)
+#pivot longer
+mq_jfc=mq_jfc %>% pivot_longer(-Sample)
+
+mq_jfc$rename=setNames(order_fct_r, order_fct)[mq_jfc$name]
+
+sf1=mq_jfc %>% 
+  mutate(name = fct_relevel(rename, order_fct_r)) %>%
+  ggplot(aes(y=rename,x=value,color=rename,group=name)) + 
+  geom_violin()+
+  geom_quasirandom(orientation="y") + 
+  scale_color_manual(values=colors)+
+  stat_summary(fun = median, geom = "vline", aes(xintercept = ..x..), linetype = 2, linewidth= 0.8, color = "black") +
+  ylab("")  +
+  xlab("")+
+   theme_minimal()+ facet_wrap(.~name,scales="free",ncol=2,dir="v") +  
+  theme(legend.position = "none",
+        axis.text.y = element_blank(), 
+        strip.text.x = element_text(
+        size = 14,
+        color = "black", 
+        face = "bold", 
+        hjust = 0)
+        )
+
+sf1
+pdf("SF1.pdf")
+sf1
+dev.off()
+```
+
+We create a table to give the information in main text
+```{r, statsreads}
+mq_jfc %>% group_by(rename) %>% summarise(total=sum(value),median=median(value),mean=mean(value),min=min(value),max=max(value),sd=sd(value))
+```
 
 # Figure 2
 
@@ -349,7 +419,7 @@ for (file in csv_files) {
   dataf$Filename <- file
   filtered_data[[file]] <- dataf
 }
-
+#dim(iSNVs)
 iSNVs <- bind_rows(filtered_data)
 iSNVs$barcode=as.integer(str_extract(iSNVs$Filename,"(?<=-)\\d+"))
 #we remove all variants calls by ivar in the same sample/position
@@ -359,7 +429,7 @@ iSNVs_count = iSNVs %>%group_by(Filename) %>% count()
 iSNVs_count$barcode=as.integer(str_extract(iSNVs_count$Filename,"(?<=-)\\d+"))
 iSNV_data=left_join(iSNVs_count,df) %>% mutate(age2=if_else(Age < 30,"young",if_else(Age >=30 & Age<50,"adult","older")))
 
-b=all_results %>% mutate(barcode=as.integer(str_extract(sampleId,"(?<=_)\\d+")))  %>% select(barcode,mut_ivar,variant)
+b=all_results %>% mutate(barcode=as.integer(str_extract(sampleId,"(?<=_)\\d+")))  %>% dplyr::select(barcode,mut_ivar,variant)
 iSNV_data=left_join(iSNV_data,b)
 iSNV_data=iSNV_data %>% mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)]","Omicron",variant))
 
@@ -367,7 +437,31 @@ iSNV_data=iSNV_data %>% mutate(variant=if_else(variant=="BA.2* [Omicron (BA.2.X)
 iSNV_data=iSNV_data%>% filter(Ct<=28)
 # filtro de Co-infection muestras con mayor de 3% de por mas de otra variante
 ff=read.table("aggregated-freyja-parse.tsv",h=T,sep="\t")
-fff=ff%>%filter(percentage*100 > 3) %>%select(file) %>% group_by(file) %>% count() %>% filter(n>1)
+fff=ff%>%filter(percentage*100 > 3) %>%dplyr::select(file) %>% group_by(file) %>% count() %>% filter(n>1)
+
+library(dplyr)
+
+# Example input (your data frame)
+# ff <- read.table("your_table.tsv", header = TRUE, sep = "\t")
+
+# Filter and summarize
+co_infect_table <- ff %>%
+  filter(percentage > 0.03) %>%                  # Keep relevant variants
+  group_by(file) %>%
+  summarise(
+    n_variants = n_distinct(variant),            # Number of variants detected
+    variants = paste(unique(variant), collapse = ", ")  # Variant names
+  ) %>%
+  mutate(
+    co_infection = ifelse(n_variants > 1, "Yes", "No")
+  ) %>%
+  arrange(desc(n_variants)) %>% filter(n_variants > 1)
+
+# View result
+print(co_infect_table)
+
+
+
 fff$barcode=as.integer(str_extract(fff$file,"(?<=-)\\d+"))
 iSNV_coi=iSNV_data %>% filter(barcode %in% fff$barcode)
 iSNV_data=iSNV_data %>% filter(!barcode %in% fff$barcode)
@@ -375,129 +469,274 @@ iSNV_coi$variant="Co-Infection"
 iSNV_data=rbind(iSNV_data,iSNV_coi)
 # load coverage data
 gcov=read.table("resume_samtools_coverage.txt",h=T)
-gcov=gcov %>% mutate(barcode=as.integer(str_extract(sname,"(?<=-)\\d+"))) %>% select(barcode,meandepth,coverage) %>%mutate(logc=log10(meandepth))
+gcov=gcov %>% mutate(barcode=as.integer(str_extract(sname,"(?<=-)\\d+"))) %>% dplyr::select(barcode,meandepth,coverage) %>%mutate(logc=log10(meandepth))
 iSNV_data=left_join(iSNV_data,gcov)
 iSNV_coi=left_join(iSNV_coi,gcov)
 
 # we filter the iSNVs position relative to the samples filtered in the previos steps
 iSNVs=iSNVs %>% filter(barcode %in% iSNV_data$barcode)
-iSNVs=left_join(iSNVs,iSNV_data %>% select(barcode,variant,Sex,meandepth), by=c("barcode"="barcode"))
+iSNVs=left_join(iSNVs,iSNV_data %>% dplyr::select(barcode,variant,Sex,meandepth), by=c("barcode"="barcode"))
 
 
 # improve co-infection panel plot
-#pfrya=ff %>% mutate(variant=if_else(str_detect(variant,"Omicron"),"Omicron",variant)) %>% filter(percentage*100 > 3)%>% ggplot(aes(x=file,y=percentage,fill=variant)) + geom_col() + theme_minimal() + labs(x="Samples", y="% variant") + theme( axis.text.x=element_blank())
+#pfrya=ff %>% mutate(variant=if_else(str_detect(variant,"Omicron"),"Omicron",variant)) %>% filter(percentage*100 > 3)%>% ggplot(aes(x=fct_reorder2(file,desc(percentage),variant),y=percentage,fill=variant)) + geom_col() + theme_minimal() + labs(x="Samples", y="% variant") + theme( axis.text.x=element_blank())
+```
+
+### Comparison iSNV vs SNV
+
+SNVs increase as function of time but iSNVs do not increase with time. Indicating other forces
+
+```{r cmpsnvs}
+library(ggpmisc)
+
+MutSNV=SNV_ivar %>% count(barcode) %>% inner_join(.,df)
+p1=MutSNV %>% filter(Ct<=28) %>% ggplot(aes(x=Sex,y=n,color = Region)) + geom_quasirandom() + 
+  facet_wrap(~year)+
+   scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) + 
+  labs(x="Sexo",y="SNV",color = "Region",title="SNVs per year")+
+  theme_light() +theme(legend.position = "none") 
+
+p2=iSNV_data %>% filter(Ct<=28) %>% ggplot(aes(x=Sex,y=n,color = Region)) + geom_quasirandom() + 
+  facet_wrap(~year)+
+   scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) + 
+  labs(x="Sexo",y="iSNV",color = "Region",title="iSNVs per year")+
+  theme_light() +theme(legend.position = "none") 
+#p1/p2
+
+
+### 
+
+p3=MutSNV %>% filter(Ct<=28) %>%mutate(Date = as.Date(Date,format = "%m/%d/%Y"))%>% ggplot(aes(x=Date,y=n)) + geom_point(aes(color=Region),size=2,alpha = 0.9) + geom_smooth(method = "lm", se = TRUE) + 
+   stat_poly_eq(
+    aes(label = paste( after_stat(eq.label),after_stat(rr.label), sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  ) +
+  labs(title = "SNVs vs Date") + 
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%Y") +
+  labs(x="Date",y="SNV")+
+  scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) + 
+  theme_light() +theme(legend.position = "none") 
+
+p4=iSNV_data %>% filter(Ct<=28) %>%mutate(Date = as.Date(Date,format = "%m/%d/%Y"))%>% ggplot(aes(x=Date,y=n)) + geom_point(aes(color=Region),size=2,alpha = 0.9) + geom_smooth(method = "lm", se = TRUE) + 
+   stat_poly_eq(
+    aes(label = paste( after_stat(eq.label),after_stat(rr.label), sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  ) +
+  labs(title = "iSNVs vs Date") + 
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%Y") +
+  labs(x="Date",y="iSNV")+
+  scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) + 
+  theme_light() +theme(legend.position = "bottom") 
+
+(p1/p2)|(p3/p4) 
+
+pdf(file="SNV_iSNV_date.pdf",width = 8, height =6)
+(p1/p2)|(p3/p4) 
+dev.off()
+```
+
+```{r}
+MutSNV=MutSNV %>% filter(Ct<=28) %>%mutate(Date = as.Date(Date,format = "%m/%d/%Y"))
+summary(lm(n~Date,data=MutSNV))
+
+iSNV_data=iSNV_data %>% filter(Ct<=28) %>%mutate(Date = as.Date(Date,format = "%m/%d/%Y"))
+summary(lm(n~Date,data=iSNV_data))
 ```
 
 ### Regression model
 
 ```{r}
 iSNVlm=lm(iSNV_data$n~iSNV_data$age2+iSNV_data$Sex
-          +iSNV_data$mut_ivar+iSNV_data$variant)
+          +iSNV_data$mut_ivar+iSNV_data$variant+iSNV_data$Ct+iSNV_data$logc)
 summary(iSNVlm)
 ```
 
-We test the mean between groups comparison according to values
-```{r figsnvs}
-# we start with the ones that are significant or relevants
+
+```{r lmmedian_test}
+# Packages
 library(ggpubr)
+library(broom)
+library(dplyr)
+library(ggplot2)
+library(glue)
 library(patchwork)
-## sex 
-my_comparisons <- list( c("F", "M"))
-sexp <- ggboxplot(iSNV_data, x = "Sex", y = "n",
-          color = "Sex", palette = "jco",
-          add = "jitter")
-#  Add p-value
-sexp= sexp  + stat_compare_means( comparisons = my_comparisons, aes(label = ..p.signif..)) + 
-  labs(y="iSNVs") +
-  ylim(30,150)+
-  theme(legend.position = "none")
 
-## variant with more than 10 cases
-mvars=c("Lambda","Omicron","Other","Co-Infection")
-iSNV_data_tmp=iSNV_data %>% filter(variant %in% mvars)
-my_comparisons <- list(
-  c("Lambda", "Omicron"), c("Other", "Lambda"), c("Omicron","Other"), c("Co-Infection","Omicron"),
-  c("Co-Infection","Other"),c("Co-Infection","Lambda"))
-varp=ggboxplot(iSNV_data_tmp, x = "variant", y = "n",
-          color = "variant", palette = "jco", add = "jitter")+ 
-  scale_color_manual('', values = variant) +
-  stat_compare_means(comparisons = my_comparisons, exact = FALSE)+ # Add pairwise comparisons p-value
-  #stat_compare_means(label.y = 80) + 
-  labs(y="",x="Variant")    +ylim(30,150)+ theme(legend.position = "none")  # Add global p-value
+#=============================
+# A) Linear model forest plot
+#=============================
+fit <- iSNVlm
 
-##Age group comparison
-my_comparisons <- list( c("young", "adult"), c("young", "older"), c("older", "adult") )
-agep=ggboxplot(iSNV_data, x = "age2", y = "n",
-          color = "age2", palette = "jco", add = "jitter")+ 
-  #scale_color_manual('', values = variant) +
-  stat_compare_means(comparisons = my_comparisons, exact = FALSE, aes(label = ..p.signif..))+ # Add pairwise comparisons p-value
- # stat_compare_means(label.y = 80) + 
-  ylim(30,150)+labs(y="",x="Age")  + theme(legend.position = "none")   # Add global p-value
+coef_df <- tidy(fit, conf.int = TRUE) %>%
+  dplyr::filter(term != "(Intercept)") %>%
+  dplyr::mutate(
+    term_label = dplyr::case_when(
+      term == "iSNV_data$age2older"            ~ "Age: older (vs ref)",
+      term == "iSNV_data$age2young"            ~ "Age: young (vs ref)",
+      term == "iSNV_data$SexM"                 ~ "Sex: male (vs ref)",
+      term == "iSNV_data$Ct"                   ~ "PCR Ct value",
+      term == "iSNV_data$logc"                 ~ "Average genome coverage (log)",
+      term == "iSNV_data$mut_ivar"             ~ "iVar mutation load",
+      term == "iSNV_data$variantCo-Infection"  ~ "Variant: co-infection",
+      term == "iSNV_data$variantEpsilon"       ~ "Variant: Epsilon",
+      term == "iSNV_data$variantGamma"         ~ "Variant: Gamma",
+      term == "iSNV_data$variantLambda"        ~ "Variant: Lambda",
+      term == "iSNV_data$variantOmicron"       ~ "Variant: Omicron",
+      term == "iSNV_data$variantOther"         ~ "Variant: Other",
+      TRUE ~ term
+    ),
+    sig = dplyr::case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01  ~ "**",
+      p.value < 0.05  ~ "*",
+      p.value < 0.1   ~ "·",
+      TRUE            ~ ""
+    ),
+    term_label = reorder(term_label, estimate)
+  )
 
-piSNVs<-sexp + agep + varp
-piSNVs
-```
+gl <- glance(fit)
+subtitle_txt <- glue(
+  "Adj. R² = {round(gl$adj.r.squared, 3)};  F({gl$df.null - gl$df.residual}, {gl$df.residual}) = ",
+  "{round(gl$statistic, 2)}, p = {signif(gl$p.value, 3)}"
+)
+
+p_model <- ggplot(coef_df, aes(x = term_label, y = estimate)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, linewidth = 0.6) +
+  geom_point(size = 2.3) +
+  geom_text(aes(label = sig, y = conf.high), vjust = -0.6, size = 4) +
+  coord_flip() +
+  labs(
+    title = "A",
+    subtitle = "Predictors of iSNV count (β, 95% CI)",
+    x = NULL, y = "Effect on iSNV count",
+    #caption = "Stars: *** p<0.001, ** p<0.01, * p<0.05, · p<0.10"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0, face = "plain"),
+    plot.subtitle = element_text(color = "grey20", size = 11),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11)
+  )
+
+#=============================
+# B) Sex comparison (Wilcoxon)
+#=============================
+sex_comparisons <- list(c("F","M"))
+
+p_sex <- ggboxplot(
+  iSNV_data, x = "Sex", y = "n",
+  color = "Sex", palette = "jco",
+  add = "jitter", #size = 1.8
+) +
+  stat_compare_means(
+    comparisons = sex_comparisons,
+    method = "wilcox.test", exact = FALSE,
+    label = "p.format"
+  ) +
+  labs(title = "B", x = "Sex", y = NULL) +
+  ylim(30, 150) +
+  theme_pubr(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 16, hjust = -0.1, face = "plain")
+  )
+
+#=============================
+# C) Variant comparison (K–W + pairs)
+#=============================
+mvars <- c("Lambda", "Omicron", "Other", "Co-Infection")
+iSNV_data_tmp <- iSNV_data %>% dplyr::filter(variant %in% mvars)
+
+pairwise_comparisons <- list(
+ # c("Lambda", "Omicron"),
+  c("Other", "Lambda"),
+  c("Omicron", "Other"),
+  c("Co-Infection", "Omicron"),
+  c("Co-Infection", "Other"),
+  c("Co-Infection", "Lambda")
+)
+
+variant_colors <- c(
+  "Lambda" = "#8E7CC3",
+  "Omicron" = "#B45F06",
+  "Other" = "#38761D",
+  "Co-Infection" = "#333333"
+)
+
+p_variant <- ggboxplot(
+  iSNV_data_tmp, x = "variant", y = "n",
+  color = "variant", palette = variant_colors,
+  add = "jitter", #size = 1.8, width = 0.6
+) +
+  stat_compare_means(comparisons = pairwise_comparisons, exact = FALSE, label = "p.format") +
+  stat_compare_means(label.y = 145, method = "kruskal.test", label = "p.format") +
+  labs(title = "C", x = "SARS-CoV-2 variant", y = NULL) +
+  ylim(30, 150) +
+  theme_pubr(base_size = 14) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 10, angle = 20, hjust = 1),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    plot.title = element_text(size = 16, hjust = -0.1, face = "plain")
+  )
+
+#=============================
+# Shared y-axis label for B+C
+#=============================
+y_shared <- ggplot() +
+  annotate("text", x = 0, y = 0,
+           label = "Number of iSNVs",
+           angle = 90, size = 4) +
+  theme_void() +
+  theme(plot.margin = margin(r = 2))
+
+# Stack B over C (remove their y labels); prepend the shared y-label column
+right_block <- (p_sex / p_variant) + plot_layout(heights = c(1, 1))
+right_block_with_ylabel <- y_shared | right_block
+right_block_with_ylabel <- right_block_with_ylabel + plot_layout(widths = c(0.06, 1))
+
+#=============================
+# Final 2-column figure: A | (B/C with shared y)
+#=============================
+final_fig <- p_model | right_block_with_ylabel
+final_fig <- final_fig + plot_layout(widths = c(1.05, 1.35))
+
+pdf("Fig4_new.pdf",width = 8, height = 6)
+final_fig
+dev.off()
+final_fig
 
 
-Distribution and impact plots
 
-```{r iSNVdist}
-#library(gggenes)
-#ggplot()+geom_gene_arrow(data=covid19_gene,aes(xmin=start,xmax=end,y=genome,fill=geneName))+scale_fill_brewer(palette = "Set3")+theme_genes()
-# iSNVs%>% filter(variant %in% mvars) %>% ggplot(aes(x=POS,fill=variant))+
-#   geom_histogram(binwidth=100,position="stack")+
-#   scale_fill_manual('', values = variant) +
-#   theme_classic()+
-#   theme(legend.position = "bottom") + 
-#   facet_grid(variant~.) +
-#   labs(y="iSNVs")
-```
 
-alternative working with windows
-
-```{r isnvw}
-
-# iSNVsw = transform(iSNVs, W = cut(iSNVs$POS,seq(0, 30000, 1000), labels = FALSE))
-# wiSNVc = iSNVsw %>% group_by(W,barcode) %>% summarize(n=n())
-# wiSNVc = left_join(wiSNVc,iSNV_data %>%select(barcode,variant),by=c("barcode"="barcode"))
-# 
-# wiSNVc = wiSNVc %>% filter(variant %in% mvars)
-# 
-# ggplot(wiSNVc, aes(x = factor(W), y = n, fill = variant,color=variant))+
-#   #geom_boxplot(width=0.7, position=position_dodge(width = 0.7))+
-#   geom_col(position=position_dodge())+
-#   #ylim(0,6)+
-#   theme_classic()
-
-tmp=iSNVs %>% filter(variant %in% mvars) %>% select(barcode,variant) %>% unique() %>% arrange(variant)
-tmp2=iSNVs %>% filter(variant %in% mvars)
-tmp2$barcode=factor(tmp2$barcode,levels=tmp$barcode)
-
-p2=tmp2 %>% ggplot(aes(x=POS,y=barcode,color=variant)) + geom_point(shape="|",size=7) +  scale_color_manual('', values = variant) +
-  scale_x_continuous(breaks = seq(0,30000,3000)) +
-  theme_classic() + labs(x="Genome position",y="samples") + theme(legend.position = "bottom")
-
-#second plot with samples count
-
-d=iSNVs %>% filter(variant %in% mvars) %>% select(POS,barcode) %>% group_by(POS,barcode) %>% unique() %>% group_by(POS) %>% summarize(n=n()) 
-p3=d%>% ggplot(aes(x=POS,y=n)) + geom_point(color=ifelse(d$n > 61,"orange", "grey")) + geom_segment( aes(x=POS, xend=POS, y=0, yend=n), color=ifelse(d$n > 61,"orange", "grey")) +theme_classic() + labs(x="Genome position",y="shared iSNV") +  theme(axis.text.x = element_blank(),axis.title.x = element_blank())
-
-patg<-p3/p2 +  plot_layout(heights = c(1,3))
-piSNVs/patg
 ```
 
 Mutation types distribution and count 
 
 ```{r aleles}
 library(ggridges)
-tmp=iSNVs %>% select("REGION","POS","REF", "ALT","ALT_FREQ") %>% mutate(allele=paste0(REF,"->",ALT))
+tmp=iSNVs %>% dplyr::select("REGION","POS","REF", "ALT","ALT_FREQ","variant") %>% filter(variant %in% c("Co-Infection","Omicron","Lambda","Other")) %>% mutate(allele=paste0(REF,"->",ALT))
+tmp2=tmp
+tmp2$variant="all"
+tmp=rbind(tmp,tmp2)
 
 tmp$allele=factor(tmp$allele,levels=names(sort(table(tmp$allele))))
 
-p1=tmp %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_density_ridges() + theme_ridges(center_axis_labels=TRUE) + theme(legend.position = "none") + labs(x="Frequency", y="Mutation types")
 
-p2=tmp %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_col() + theme_ridges(center_axis_labels=TRUE) + theme(legend.position = "none",axis.text.y = element_blank(),axis.title.y = element_blank()) + labs(x="Count") 
+  
 
+p1=tmp  %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_density_ridges() + theme_ridges(center_axis_labels=TRUE) + facet_wrap(.~variant,ncol=1) + theme(legend.position = "none") + labs(x="Frequency", y="Mutation types")
+
+p2=tmp %>% ggplot(aes(y=allele,x=ALT_FREQ,fill=allele,color=allele))  +  geom_col() +  facet_wrap(.~variant,ncol=1) + theme_ridges(center_axis_labels=TRUE) + theme(legend.position = "none",axis.text.y = element_blank(),axis.title.y = element_blank()) + labs(x="Count") 
+
+pdf("Fig5_new.pdf",width = 7, height = 11)
+p1+p2 + plot_layout(widths = c(3,1))
+dev.off()
 p1+p2 + plot_layout(widths = c(3,1))
 ```
 
@@ -506,13 +745,22 @@ Mutation impact and Dn/Ds per gene in samples
 ### running dndscv on covid data
 
 ```{r dndscovid}
+#library(devtools); install_github("im3sanger/dndscv")
+
 library(dndscv)
 #sampleID chr      pos ref mut
 names <- c(sampleID="barcode", chr="REGION", pos="POS",ref="REF",mut="ALT")
-omicron=iSNVs %>% filter(variant=="Omicron") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
-other=iSNVs %>% filter(variant=="Other") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
-Lambda=iSNVs %>% filter(variant=="Lambda") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
-Coi=iSNVs %>% filter(variant=="Co-Infection") %>% select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+omicron=iSNVs %>% filter(variant=="Omicron") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+
+#library(dplyr)
+
+omicron <- omicron %>%
+  distinct(chr, pos, ref, mut, .keep_all = TRUE)
+
+#we remove iSNVs happening at the same positiion within
+other=iSNVs %>% filter(variant=="Other") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) %>%  distinct(chr, pos, ref, mut, .keep_all = TRUE)
+Lambda=iSNVs %>% filter(variant=="Lambda") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) %>% distinct(chr, pos, ref, mut, .keep_all = TRUE)
+Coi=iSNVs %>% filter(variant=="Co-Infection") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) %>% distinct(chr, pos, ref, mut, .keep_all = TRUE)
 
 # we run the dnds analisys 
 dnds_omi = dndscv(omicron, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
@@ -520,31 +768,171 @@ dnds_oth = dndscv(other, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", m
 dnds_lam = dndscv(Lambda, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
 dnds_coi = dndscv(Coi, refdb = "./dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
 
-a=dnds_oth$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Other")
-b=dnds_lam$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Lambda")
-c=dnds_omi$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Omicron")
-d=dnds_coi$sel_cv %>% select(gene_name,wmis_cv) %>% mutate(var="Co-Infection")
-
-bb=rbind(a,b,c,d) %>% ggplot(aes(y=gene_name,x=wmis_cv,color=var,group=var))  + geom_point(size=2)+ 
-   geom_vline(xintercept = 1) +labs(y="Genes",x="dnds missense")+ xlim(0,7)+
-  #coord_flip()+
-  scale_color_manual('', values = variant) +
-  theme_minimal() + theme(axis.text.x = element_text(angle = 90))
-
-
-global_dnds=rbind(dnds_oth$globaldnds[1,],
-                  dnds_lam$globaldnds[1,],
-                  dnds_omi$globaldnds[1,],
-                  dnds_coi$globaldnds[1,])
-global_dnds$name=c("Other","Lambda","Omicron","Co-Infection")
-global_dnds$name=factor(global_dnds$name,levels=c("Other","Lambda","Omicron","Co-Infection"))
-cc=global_dnds %>% ggplot(aes(x=name,y=mle,color=name)) + geom_point() + geom_pointrange(aes(ymin = cilow, ymax = cihigh)) +scale_color_manual('', values = variant) + theme_minimal() + labs(y="Global dn/ds missens mutations (MLE)",x="") + coord_flip() +theme(legend.position = "none") 
-
-cc|bb
-#sel_cv  %>% select(gene_name, n_syn, n_mis) %>% pivot_longer(-gene_name) %>% ggplot(aes(y=gene_name,x=value/23,fill=name)) + geom_col(position = position_dodge())
-# dnds_omi$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
-# dnds_oth$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
-# dnds_lam$sel_cv %>% ggplot(aes(y=gene_name,x=wmis_cv)) + geom_point() + geom_segment( aes(x=wmis_cv, xend=wmis_cv, y=gene_name, yend=gene_name))
+a=dnds_oth$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Other")
+b=dnds_lam$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Lambda")
+c=dnds_omi$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Omicron")
+d=dnds_coi$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Co-Infection")
 
 ```
+```{r figdnds2}
+# ---- Packages
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
+
+
+# ---- 3) Aesthetic choices ----
+variant_colors <- c(
+  "Lambda" = "#8E7CC3",
+  "Omicron" = "#B45F06",
+  "Other" = "#38761D",
+  "Co-Infection" = "#333333"
+)
+
+# ---- Global panel with CIs
+global_dnds <- dplyr::bind_rows(
+  dnds_oth$globaldnds[5,],
+  dnds_lam$globaldnds[5,],
+  dnds_omi$globaldnds[5,],
+  dnds_coi$globaldnds[5,]
+) %>%
+  mutate(
+    name = c("Other","Lambda","Omicron","Co-Infection"),
+    name = factor(name, levels = c("Other","Lambda","Omicron","Co-Infection"))
+  )
+
+p_global <- ggplot(global_dnds, aes(x = name, y = mle, color = name)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_pointrange(aes(ymin = cilow, ymax = cihigh), position = position_dodge(width = 0.2)) +
+  scale_color_manual(values = variant_colors, guide = "none") + ylim(0,1.2) +
+#  coord_flip() +
+  labs(
+    x = NULL,
+    y = expression("Global " * omega ~ "(dN/dS, MLE)"),
+    title = "Global dN/dS"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 12),
+    axis.title.y = element_text(margin = margin(r = 5)),
+    axis.text.x = element_text(size = 10, angle = 20, hjust = 1)
+  )
+
+
+# ---- Combine (narrow global panel + wider gene panel)
+#final_dn_ds_fig <- p_global + p_genes + plot_layout(widths = c(1, 3))
+#final_dn_ds_fig
+#pdf("FigX.pdf",height = 8,width = 16)
+#final_dn_ds_fig
+#dev.off()
+
+
+# ---- 1) Combine & harmonize ----
+# a, b, c, d must each have: gene_name, wmis_cv, var
+df <- dplyr::bind_rows(a, b, c, d) %>%
+  mutate(
+    var = factor(var, levels = c("Other", "Lambda", "Omicron", "Co-Infection"))
+  )
+
+# ---- 2) Global gene order (same across all panels) ----
+# Order by max dN/dS across variants (descending)
+gene_levels <- df %>%
+  group_by(gene_name) %>%
+  summarize(max_omega = max(wmis_cv, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(max_omega)) %>%
+  pull(gene_name)
+
+df <- df %>%
+  mutate(
+    gene_name = factor(gene_name, levels = rev(gene_levels)),   # top = highest
+    # Cap at 5 for plotting, flag those > 5
+    omega_cap = pmin(wmis_cv, 3),
+    capped    = wmis_cv > 3
+  )
+
+
+
+# Helper to make one panel; show_y controls gene labels
+make_panel <- function(v, show_y = FALSE, show_x = FALSE) {
+  ggplot(df %>% filter(var == v),
+         aes(x = omega_cap, y = gene_name)) +
+    geom_vline(xintercept = 1, linetype = "dashed", linewidth = 0.5) +
+    geom_point(aes(shape = capped),
+               size = 2.2,
+               color = variant_colors[[as.character(v)]]) +
+    scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 17), guide = "none") +
+    coord_cartesian(xlim = c(0, 3)) +
+    labs(
+      title = as.character(v),
+      x = if (show_x) "dN/dS (missense, ω)" else NULL,
+      y = if (show_y) "Gene" else NULL
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title = element_text(size = 12, hjust = 0),
+      axis.text.y = if (show_y) element_text(size = 9) else element_blank(),
+      axis.title.y = if (show_y) element_text() else element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# ---- 4) Build panels (labels only on the first) ----
+p_other <- make_panel("Other",        show_y = TRUE)
+p_lambda <- make_panel("Lambda",      show_y = FALSE)
+p_omi   <- make_panel("Omicron",      show_y = FALSE, show_x = TRUE)
+p_coi   <- make_panel("Co-Infection", show_y = FALSE)
+
+# ---- 5) Combine with patchwork ----
+gene_panels <- p_other | p_lambda | p_omi | p_coi
+gene_panels
+
+final_dn_ds_fig <- p_global + gene_panels + plot_layout(widths = c(1, 3))
+
+pdf("Fig4_dnds.pdf",width = 10, height = 5)
+final_dn_ds_fig
+dev.off()
+
+final_dn_ds_fig
+
+var=df %>% select(gene_name,wmis_cv,var)%>% pivot_wider(names_from=var, values_from = wmis_cv)
+global_dnds
+var
+
+```
+
+Stadistical tests at gene-level between variants, 
+we aim to anwser whether 
+```{r statstest}
+kruskal.test(as.numeric(wmis_cv) ~ var, data = df)
+#pairwise test
+FSA::dunnTest(wmis_cv ~ var, data=df, method="bh")
+
+# accounting for gene differences
+library(lme4)
+m <- lmer(wmis_cv ~ var + (1 | gene_name), data=df)
+anova(m)
+
+
+```
+
+There is no global difference in dN/dS (missense burden) between variants at the gene level.
+
+A p-value of 0.94 indicates the distributions of dN/dS across Other, Lambda, Omicron, and Co-infection are essentially indistinguishable when considering all genes together.
+
+
+Across the SARS-CoV-2 genome, variants share similar overall selective constraints at the gene level.
+
+This is consistent with the known biology:
+
+Most SARS-CoV-2 genes evolve under strong purifying selection (dN/dS < 1).
+
+Adaptive changes occur in specific loci (e.g., Spike, ORF6, ORF10) rather than globally.
+
+Omicron, despite having many mutations, does not show a uniform shift in ω across all genes.
+
+Co-infections (which often involve Omicron + another lineage) do not show additive or synergistic increases in selective pressure.
+
+These results align with studies indicating that SARS-CoV-2 diversification involves localized episodic selection, not widespread genome-wide shifts in evolutionary pressure.
 
