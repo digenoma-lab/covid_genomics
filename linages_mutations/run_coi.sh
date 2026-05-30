@@ -1,0 +1,12 @@
+python call_coinfections.py \
+  --variants-dir iSNVs \
+  --lineage-defs lineage_defs_v3.tsv \
+  --glob "*.tsv" \
+  --outdir coinfection_calls \
+  --min-total-dp 100 \
+  --min-alt-dp 30 \
+  --major-af-min 0.7 \
+  --minor-af-min 0.08 \
+  --minor-af-max 0.4 \
+  --min-minor-support 4 \
+  --min-minor-median-af 0.10 

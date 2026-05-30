@@ -1,0 +1,26 @@
+label	n_specific_sites	n_minor_supported_sites	minor_median_af	minor_mean_af	minor_supported_sites	minor_supported_mutations	minor_supported_alt_dp	minor_supported_total_dp	passes_minor_rule
+Delta	28	5	0.19559	0.22638597999999996	['22227:C', '24410:G', '25469:C', '28461:A', '29402:G']	['22227:C>T', '24410:G>A', '25469:C>T', '28461:A>G', '29402:G>T']	[14116.0, 36483.0, 15904.0, 92266.0, 25361.0]	[94233.0, 92228.0, 81313.0, 308253.0, 276722.0]	True
+B.1.617.3	12	2	0.24361095	0.24361095	['24410:G', '29402:G']	['24410:G>A', '29402:G>T']	[25361.0, 36483.0]	[276722.0, 92228.0]	False
+Alpha	20	2	0.17814249999999998	0.17814249999999998	['23709:C', '27972:C']	['23709:C>T', '27972:C>T']	[26118.0, 21412.0]	[121966.0, 150637.0]	False
+Mu	20	1	0.395574	0.395574	['24410:G']	['24410:G>A']	[36483.0]	[92228.0]	False
+Kappa	7	1	0.299319	0.299319	['25469:C']	['25469:C>T']	[92266.0]	[308253.0]	False
+A.23.1	12	0	0.0	0.0	[]	[]	[]	[]	False
+AV.1	7	0	0.0	0.0	[]	[]	[]	[]	False
+B.1.1.318	16	0	0.0	0.0	[]	[]	[]	[]	False
+Beta	12	0	0.0	0.0	[]	[]	[]	[]	False
+Epsilon	13	0	0.0	0.0	[]	[]	[]	[]	False
+Eta	17	0	0.0	0.0	[]	[]	[]	[]	False
+Gamma	14	0	0.0	0.0	[]	[]	[]	[]	False
+Iota	16	0	0.0	0.0	[]	[]	[]	[]	False
+Lambda	12	0	0.0	0.0	[]	[]	[]	[]	False
+Theta	15	0	0.0	0.0	[]	[]	[]	[]	False
+XBB	13	0	0.0	0.0	[]	[]	[]	[]	False
+XBB-parent1	4	0	0.0	0.0	[]	[]	[]	[]	False
+XBB-parent2	1	0	0.0	0.0	[]	[]	[]	[]	False
+XBB.1	3	0	0.0	0.0	[]	[]	[]	[]	False
+XBB.1.16	5	0	0.0	0.0	[]	[]	[]	[]	False
+XBB.1.5	3	0	0.0	0.0	[]	[]	[]	[]	False
+XE	2	0	0.0	0.0	[]	[]	[]	[]	False
+XE-parent1	0	0	0.0	0.0	[]	[]	[]	[]	False
+XE-parent2	1	0	0.0	0.0	[]	[]	[]	[]	False
+Zeta	6	0	0.0	0.0	[]	[]	[]	[]	False

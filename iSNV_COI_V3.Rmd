@@ -1,0 +1,1442 @@
+---
+title: "iSNV_COI_V3"
+author: "Alex Di Genova"
+date: "2026-05-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## iSNV 
+
+iSNV filters from PASS variants called with bcftools
+
+```{r isnv}
+library(tidyverse)
+library(broom)
+library(patchwork)
+library(ggbeeswarm)
+library(ggpmisc)
+library(ggpubr)
+library(glue)
+
+# -----------------------------
+# Parameters
+# -----------------------------
+pars <- list(
+  af_min_primary = 0.05,
+  af_min_sens    = 0.03,
+  af_max         = 0.95,
+  alt_qual_min   = 30,
+  ct_max         = 25,
+
+  # strand support
+  alt_rv_min     = 5,   # at least 5 reverse ALT reads
+  alt_fw_min     = 5,   # at least 5 forward ALT reads
+
+  # coarse genome-end mask if no primer BED is available
+  end_mask_bp    = 100,
+
+  # recurrent hotspot definition
+  recurrent_prop_min = 0.10,   # site seen in >=10% of samples
+  recurrent_af_max   = 0.10    # but median AF stays low -> suspicious
+)
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+calc_strand_bias_p <- function(ref_dp, ref_rv, alt_dp, alt_rv) {
+  ref_fw <- ref_dp - ref_rv
+  alt_fw <- alt_dp - alt_rv
+
+  # avoid negative weird cases
+  if (any(c(ref_fw, ref_rv, alt_fw, alt_rv) < 0)) return(NA_real_)
+
+  m <- matrix(c(ref_fw, ref_rv, alt_fw, alt_rv), nrow = 2, byrow = TRUE)
+  fisher.test(m, alternative = "greater")$p.value
+}
+
+read_isnv_file <- function(f) {
+  read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>%
+    mutate(
+      Filename = basename(f),
+      barcode  = as.integer(stringr::str_extract(basename(f), "(?<=-)\\d+"))
+    )
+}
+
+# -----------------------------
+# Load raw iSNV candidates
+# -----------------------------
+files_isnv <- list.files("iSNVs", pattern = "_variants.tsv$", full.names = TRUE)
+
+raw_isnv_cache_file <- "analysis/raw_isnv_cache.rds"
+raw_isnv_cache_meta <- tibble(
+  file = normalizePath(files_isnv),
+  size = file.info(files_isnv)$size,
+  mtime = file.info(files_isnv)$mtime
+)
+
+if (file.exists(raw_isnv_cache_file)) {
+  raw_isnv_cache <- readRDS(raw_isnv_cache_file)
+} else {
+  raw_isnv_cache <- NULL
+}
+
+if (
+  !is.null(raw_isnv_cache) &&
+  identical(raw_isnv_cache$meta, raw_isnv_cache_meta)
+) {
+  raw_isnv <- raw_isnv_cache$data
+} else {
+  raw_isnv <- purrr::map_dfr(files_isnv, read_isnv_file) %>%
+    filter(PASS=TRUE) %>%
+    mutate(
+      ALT_FW = ALT_DP - ALT_RV,
+      REF_FW = REF_DP - REF_RV,
+      strand_p = purrr::pmap_dbl(
+        list(REF_DP, REF_RV, ALT_DP, ALT_RV),
+        calc_strand_bias_p
+      ),
+      both_strands_ok = ALT_RV >= pars$alt_rv_min & ALT_FW >= pars$alt_fw_min,
+      basic_ok =
+        PASS == TRUE &
+        ALT_QUAL >= pars$alt_qual_min &
+        ALT_FREQ < pars$af_max,
+      genome_end = POS <= pars$end_mask_bp | POS >= (29903 - pars$end_mask_bp)
+    )
+
+  saveRDS(
+    list(meta = raw_isnv_cache_meta, data = raw_isnv),
+    raw_isnv_cache_file
+  )
+}
+
+# -----------------------------
+# Load consensus SNVs
+# -----------------------------
+files_snv <- list.files("SNVs", pattern = "\\.variants.tsv$", full.names = TRUE)
+
+cons_snv <- purrr::map_dfr(files_snv, \(f) {
+  read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>%
+    mutate(
+      Filename = basename(f),
+      barcode  = as.integer(stringr::str_extract(basename(f), "(?<=-)\\d+"))
+    )
+}) %>%
+  transmute(barcode, POS, ALT, cons_key = paste(barcode, POS, ALT, sep = "_"))
+
+
+#demografic data
+df=read.table("demographics/all_samples.txt", h=T)
+dates_formatted <- as.Date(df$Date, format="%m/%d/%Y")
+years <- format(dates_formatted, "%Y")
+df$year=years
+df=df %>% mutate(Ct=as.integer(Ct))
+df$all="all"
+
+# -----------------------------
+# loadcoi: Pangolin selected variant plus COI marker
+# -----------------------------
+all_results <- read.table("analysis/all_results.csv", h = TRUE, sep = ",") %>%
+  mutate(
+    barcode = as.integer(stringr::str_extract(sampleId, "(?<=_)\\d+")),
+    pangolin_variant = case_when(
+      stringr::str_detect(variant, "Omicron") ~ "Omicron",
+      TRUE ~ variant
+    )
+  ) %>%
+  transmute(
+    barcode,
+    pangolin_variant,
+    mut_ivar,
+    pangolin_location = location,
+    pangolin_cluster = cluster
+  )
+
+coi_summary_file <- "linages_mutations/coinfection_calls_lineage_v3/cohort_coinfection_summary.tsv"
+
+sample_coi <- read.table(coi_summary_file, h = TRUE, sep = "\t") %>%
+  mutate(
+    barcode = as.integer(stringr::str_extract(sample, "(?<=-)\\d+")),
+    co_infection = co_infection_flag %in% c(TRUE, "TRUE", "True", "true", 1, "1"),
+    major_label = na_if(stringr::str_trim(major_label), ""),
+    minor_label = na_if(stringr::str_trim(minor_label), ""),
+    coi_major_lineage = major_label,
+    coi_minor_lineage = if_else(co_infection, minor_label, NA_character_),
+    coi_lineage_call = if_else(
+      co_infection,
+      paste(major_label, minor_label, sep = " + "),
+      major_label
+    )
+  ) %>%
+  transmute(
+    barcode,
+    coi_major_lineage,
+    coi_major_frac_supported_sites = major_frac_supported_sites,
+    coi_major_status = major_status,
+    coi_major_n_supported_sites = major_n_supported_sites,
+    coi_minor_lineage,
+    coi_minor_n_supported_sites = minor_n_supported_sites,
+    coi_minor_median_af = minor_median_af,
+    coi_confidence_tier = confidence_tier,
+    co_infection,
+    coi_lineage_call
+  )
+
+df <- df %>%
+  left_join(all_results, by = "barcode") %>%
+  left_join(sample_coi, by = "barcode") %>%
+  mutate(
+    pangolin_variant = replace_na(pangolin_variant, "Unknown"),
+    coi_lineage_call = replace_na(coi_lineage_call, "Unknown"),
+    coi_confidence_tier = replace_na(coi_confidence_tier, "none"),
+    co_infection = replace_na(co_infection, FALSE),
+    coi_major_status = replace_na(coi_major_status, "unassigned"),
+    lineage_group = if_else(co_infection, "Co-Infection", pangolin_variant)
+  )
+
+
+
+sample_qc <- df %>%
+  select(barcode, Ct, pangolin_variant, mut_ivar, pangolin_location, pangolin_cluster,
+         coi_major_lineage, coi_major_frac_supported_sites, coi_major_status,
+         coi_major_n_supported_sites, coi_minor_lineage, coi_minor_n_supported_sites,
+         coi_minor_median_af, coi_confidence_tier, co_infection, coi_lineage_call,
+         lineage_group) %>%
+  mutate(
+    sample_ok = Ct <= pars$ct_max
+  )
+
+# -----------------------------
+# Annotate candidate calls
+# -----------------------------
+raw_isnv <- raw_isnv %>%
+  mutate(cons_key = paste(barcode, POS, ALT, sep = "_")) %>%
+  left_join(sample_qc, by = "barcode") %>%
+  mutate(
+    is_consensus_snv = cons_key %in% cons_snv$cons_key,
+    site_key = paste(REGION, POS, REF, ALT, sep = "_")
+  )
+
+# -----------------------------
+# Recurrent suspicious hotspots
+# Seen in many samples but with low median AF
+# -----------------------------
+n_samples <- raw_isnv %>% distinct(barcode) %>% nrow()
+
+hotspots <- raw_isnv %>%
+  filter(
+    basic_ok,
+    ALT_FREQ >= pars$af_min_sens,
+    !is.na(sample_ok), sample_ok,
+    !is_consensus_snv
+  ) %>%
+  group_by(site_key, REGION, POS, REF, ALT) %>%
+  summarise(
+    n_samples_site = n_distinct(barcode),
+    prop_samples   = n_samples_site / n_samples,
+    median_af      = median(ALT_FREQ, na.rm = TRUE),
+    mean_alt_rv    = mean(ALT_RV, na.rm = TRUE),
+    mean_alt_fw    = mean(ALT_FW, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    suspicious_hotspot =
+      prop_samples >= pars$recurrent_prop_min &
+      median_af <= pars$recurrent_af_max
+  )
+
+raw_isnv <- raw_isnv %>%
+  left_join(
+    hotspots %>% select(site_key, suspicious_hotspot),
+    by = "site_key"
+  ) %>%
+  mutate(suspicious_hotspot = replace_na(suspicious_hotspot, FALSE))
+
+# -----------------------------
+# Final primary and sensitivity filters
+# -----------------------------
+isnv_primary <- raw_isnv %>%
+  filter(
+    basic_ok,
+    ALT_FREQ >= pars$af_min_primary,
+    !is.na(sample_ok), sample_ok,
+    !is_consensus_snv,
+    both_strands_ok,
+    !genome_end,
+    !suspicious_hotspot
+  )
+
+isnv_sensitivity <- raw_isnv %>%
+  filter(
+    basic_ok,
+    ALT_FREQ >= pars$af_min_sens,
+    !is.na(sample_ok), sample_ok,
+    !is_consensus_snv,
+    both_strands_ok,
+    !genome_end,
+    !suspicious_hotspot
+  )
+
+```
+
+## iSNV plots
+
+summary of iSNV passing variants per filter
+
+```{r pressure, echo=FALSE}
+
+library(tidyverse)
+library(scales)
+
+qc_counts <- tibble(
+  step = c(
+    "Raw",
+    "AF >= 3%",
+    "Ct <= 28",
+    "Not consensus SNV",
+    "Both strands",
+    "Not genome end",
+    "Not recurrent hotspot",
+    "Primary AF >= 5%"
+  ),
+  n = c(
+    nrow(raw_isnv),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens, na.rm = TRUE),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens & raw_isnv$sample_ok, na.rm = TRUE),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens & raw_isnv$sample_ok & !raw_isnv$is_consensus_snv, na.rm = TRUE),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens & raw_isnv$sample_ok & !raw_isnv$is_consensus_snv & raw_isnv$both_strands_ok, na.rm = TRUE),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens & raw_isnv$sample_ok & !raw_isnv$is_consensus_snv & raw_isnv$both_strands_ok & !raw_isnv$genome_end, na.rm = TRUE),
+    sum(raw_isnv$basic_ok & raw_isnv$ALT_FREQ >= pars$af_min_sens & raw_isnv$sample_ok & !raw_isnv$is_consensus_snv & raw_isnv$both_strands_ok & !raw_isnv$genome_end & !raw_isnv$suspicious_hotspot, na.rm = TRUE),
+    nrow(isnv_primary)
+  )
+) %>%
+  mutate(
+    step = factor(step, levels = rev(step)),
+    retained_pct = 100 * n / n[1],
+    label = paste0(comma(n), " (", sprintf("%.1f", retained_pct), "%)"),
+    group = case_when(
+      step == "Raw" ~ "Raw",
+      step == "Primary AF >= 5%" ~ "Final",
+      TRUE ~ "Intermediate"
+    )
+  )
+
+a=ggplot(qc_counts, aes(x = step, y = n, fill = group)) +
+  geom_col(width = 0.75) +
+  geom_text(
+    aes(label = label),
+    hjust = -0.08,
+    size = 5
+  ) +
+  coord_flip(clip = "off") +
+  scale_y_log10(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.28))
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Raw" = "#4D4D4D",
+      "Intermediate" = "#4C78A8",
+      "Final" = "#2E8B57"
+    )
+  ) +
+  labs(
+   # title = "iSNV filtering cascade",
+    x = NULL,
+    y = "Number of candidate iSNVs (log10 scale)"
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    legend.position = "none",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(size = 13),
+    plot.title = element_text(size = 24, face = "bold"),
+    axis.title.x = element_text(size = 16),
+    plot.margin = margin(20, 120, 20, 20)
+  )
+
+a
+pdf("Filtering_iSNV_steps.pdf",7,4)
+a
+dev.off()
+```
+
+
+## Primary iSNV variable diagnostics
+
+These plots inspect the retained `isnv_primary` calls directly. They are useful for checking
+whether the final calls have plausible allele frequencies, read depths, strand support,
+quality values, genomic distribution, and mutation spectra.
+
+qc V2
+
+```{r qcv2}
+library(tidyverse)
+library(patchwork)
+library(scales)
+library(viridis)
+
+# ============================================================
+# Main iSNV QC figure
+# ============================================================
+
+# -----------------------------
+# Sample-level summary
+# -----------------------------
+isnv_counts <- isnv_primary %>%
+  group_by(barcode) %>%
+  summarise(
+    n_isnv = n(),
+    mean_alt_freq = mean(ALT_FREQ, na.rm = TRUE),
+    median_alt_freq = median(ALT_FREQ, na.rm = TRUE),
+    mean_total_dp = mean(TOTAL_DP, na.rm = TRUE),
+    median_total_dp = median(TOTAL_DP, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+isnv_sample <- df %>%
+  mutate(
+    barcode = as.integer(barcode),
+    Date = as.Date(Date, format = "%m/%d/%Y"),
+    Sex = factor(Sex),
+    pangolin_variant = factor(pangolin_variant),
+    co_infection = factor(
+      co_infection,
+      levels = c(FALSE, TRUE),
+      labels = c("No", "Yes")
+    ),
+    lineage_group = factor(lineage_group),
+    sample_ok = Ct <= pars$ct_max
+  ) %>%
+  left_join(isnv_counts, by = "barcode") %>%
+  mutate(
+    n_isnv = replace_na(n_isnv, 0L),
+    any_isnv = n_isnv > 0
+  )
+
+isnv_sample_qc <- isnv_sample %>%
+  filter(sample_ok)
+
+# -----------------------------
+# Call-level summary
+# -----------------------------
+isnv_primary_plot <- isnv_primary %>%
+  mutate(
+    mutation = paste0(REF, ">", ALT),
+    strand_balance = ALT_FW / ALT_DP
+  )
+
+mutation_order <- c(
+  "A>C", "A>G", "A>T",
+  "C>A", "C>G", "C>T",
+  "G>A", "G>C", "G>T",
+  "T>A", "T>C", "T>G"
+)
+
+isnv_primary_plot <- isnv_primary_plot %>%
+  mutate(
+    mutation = factor(mutation, levels = mutation_order)
+  )
+
+# -----------------------------
+# Summary stats
+# -----------------------------
+n_samples <- nrow(isnv_sample_qc)
+n_with_isnv <- sum(isnv_sample_qc$n_isnv > 0)
+med_isnv <- median(isnv_sample_qc$n_isnv)
+iqr_isnv <- IQR(isnv_sample_qc$n_isnv)
+total_primary <- nrow(isnv_primary)
+
+# -----------------------------
+# Colors and theme
+# -----------------------------
+main_blue <- "#4C78A8"
+threshold_red <- "#C44E52"
+main_grey <- "grey35"
+
+mutation_cols <- c(
+  "A>C" = "#8FB9A8",
+  "A>G" = "#D8A25E",
+  "A>T" = "#B9C36A",
+  "C>A" = "#7EA3B0",
+  "C>G" = "#A79BBE",
+  "C>T" = "#2A9D8F",
+  "G>A" = "#6FAE9B",
+  "G>C" = "#8DB7C7",
+  "G>T" = "#4C78A8",
+  "T>A" = "#9C7AA5",
+  "T>C" = "#C97AA4",
+  "T>G" = "#E07A5F"
+)
+
+theme_qc <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12.5),
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 11.5),
+    axis.text = element_text(size = 10.5),
+    legend.title = element_text(size = 10.5),
+    legend.text = element_text(size = 9.5)
+  )
+
+# -----------------------------
+# A. Burden per sample
+# -----------------------------
+p1 <- ggplot(isnv_sample_qc, aes(x = n_isnv)) +
+  geom_histogram(
+    binwidth = 1,
+    boundary = -0.5,
+    fill = main_grey,
+    color = "white",
+    linewidth = 0.2
+  ) +
+  geom_vline(
+    xintercept = med_isnv,
+    linetype = "dashed",
+    color = threshold_red,
+    linewidth = 0.8
+  ) +
+  labs(
+    title = "Burden per sample",
+    x = "Primary iSNVs per sample",
+    y = "Samples"
+  ) +
+  theme_qc
+
+# -----------------------------
+# B. Burden versus Ct
+# -----------------------------
+p2 <- ggplot(isnv_sample_qc, aes(x = Ct, y = n_isnv)) +
+  geom_point(
+    color = main_blue,
+    alpha = 0.75,
+    size = 2.2
+  ) +
+  geom_smooth(
+    method = "glm",
+    method.args = list(family = "poisson"),
+    se = TRUE,
+    color = "black",
+    linewidth = 0.8
+  ) +
+  labs(
+    title = "Burden vs Ct",
+    x = "Ct",
+    y = "Primary iSNVs per sample"
+  ) +
+  theme_qc
+
+# -----------------------------
+# C. ALT frequency distribution
+# -----------------------------
+p3 <- ggplot(isnv_primary_plot, aes(x = ALT_FREQ)) +
+  geom_histogram(
+    binwidth = 0.025,
+    fill = main_blue,
+    color = "white",
+    linewidth = 0.2
+  ) +
+  geom_vline(
+    xintercept = pars$af_min_primary,
+    linetype = "dashed",
+    color = threshold_red,
+    linewidth = 0.8
+  ) +
+  labs(
+    title = "ALT frequency",
+    x = "ALT frequency",
+    y = "Primary iSNV count"
+  ) +
+  theme_qc
+
+# -----------------------------
+# D. Depth support
+# -----------------------------
+p4 <- ggplot(
+  isnv_primary_plot,
+  aes(x = TOTAL_DP, y = ALT_DP, color = ALT_FREQ)
+) +
+  geom_point(
+    alpha = 0.55,
+    size = 1.5
+  ) +
+  geom_abline(
+    intercept = 0,
+    slope = pars$af_min_primary,
+    linetype = "dashed",
+    color = threshold_red,
+    linewidth = 0.8
+  ) +
+  scale_x_log10(labels = comma) +
+  scale_y_log10(labels = comma) +
+  scale_color_viridis_c(
+    option = "C",
+    name = "AF",
+    end = 0.95
+  ) +
+  labs(
+    title = "Depth support",
+    x = "Total depth",
+    y = "ALT depth"
+  ) +
+  theme_qc
+
+# -----------------------------
+# E. Genome-wide distribution
+# -----------------------------
+p5 <- ggplot(isnv_primary_plot, aes(x = POS)) +
+  geom_histogram(
+    binwidth = 500,
+    fill = main_blue,
+    color = "white",
+    linewidth = 0.2
+  ) +
+  annotate(
+    "rect",
+    xmin = 1,
+    xmax = pars$end_mask_bp,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = threshold_red,
+    alpha = 0.12
+  ) +
+  annotate(
+    "rect",
+    xmin = 29903 - pars$end_mask_bp,
+    xmax = 29903,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = threshold_red,
+    alpha = 0.12
+  ) +
+  labs(
+    title = "Genome distribution",
+    x = "Genome position",
+    y = "Primary iSNV count"
+  ) +
+  theme_qc
+
+# -----------------------------
+# F. Mutation spectrum
+# -----------------------------
+p6 <- ggplot(isnv_primary_plot, aes(x = mutation, fill = mutation)) +
+  geom_bar(
+    color = "white",
+    linewidth = 0.2
+  ) +
+  scale_fill_manual(values = mutation_cols, drop = FALSE) +
+  labs(
+    title = "Mutation spectrum",
+    x = "Mutation type",
+    y = "Primary iSNV count"
+  ) +
+  theme_qc +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# -----------------------------
+# Combine figure
+# -----------------------------
+qc_results_fig <-
+  (p1 | p2) /
+  (p3 | p4) /
+  (p5 | p6) +
+  plot_annotation(
+   # title = "Primary iSNV quality control",
+    tag_levels = "A",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold")
+    )
+  )
+
+qc_results_fig
+
+# -----------------------------
+# Save figure
+# -----------------------------
+# ggsave(
+#   "figures/isnv_results_qc_main.png",
+#   qc_results_fig,
+#   width = 12,
+#   height = 11,
+#   dpi = 300
+# )
+# 
+ggsave(
+  "isnv_results_qc_main.pdf",
+  qc_results_fig,
+  width = 12,
+  height = 11
+)
+```
+
+## Comparison iSNV vs SNV
+
+This reproduces the SNV/iSNV comparison from `MFig_Covid.Rmd` using the cleaned
+`isnv_primary` calls and keeping zero-count samples in both burdens.
+
+```{r cmpsnvs_clean, fig.width=12, fig.height=7}
+MutSNV <- cons_snv %>%
+  count(barcode, name = "n_snv") %>%
+  right_join(df, by = "barcode") %>%
+  mutate(
+    n_snv = replace_na(n_snv, 0L),
+    Date = as.Date(Date, format = "%m/%d/%Y")
+  ) %>%
+  filter(Ct <= pars$ct_max)
+
+iSNV_date_data <- isnv_sample_qc %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
+add_coi_medium_plot_group <- function(dat) {
+  base_dat <- dat %>%
+    mutate(lineage_plot_group = as.character(lineage_group))
+
+  medium_coi_dat <- base_dat %>%
+    filter(lineage_group == "Co-Infection", coi_confidence_tier == "medium") %>%
+    mutate(lineage_plot_group = "Co-Infection medium")
+
+  plot_dat <- bind_rows(base_dat, medium_coi_dat)
+  preferred_levels <- c("Other", "Lambda", "Omicron", "Co-Infection", "Co-Infection medium")
+  extra_levels <- setdiff(sort(unique(plot_dat$lineage_plot_group)), preferred_levels)
+
+  plot_dat %>%
+    mutate(
+      lineage_plot_group = factor(
+        lineage_plot_group,
+        levels = c(preferred_levels, extra_levels)
+      )
+    )
+}
+
+MutSNV_plot <- add_coi_medium_plot_group(MutSNV)
+iSNV_date_plot <- add_coi_medium_plot_group(iSNV_date_data)
+
+p_snv_sex <- MutSNV_plot %>%
+  ggplot(aes(x = Sex, y = n_snv, color = pangolin_location)) +
+  geom_quasirandom(width = 0.18, alpha = 0.85) +
+     scale_color_manual(values = c("Santiago" = "blue", "Rancagua" = "red")) + 
+  facet_wrap(~ year) +
+  labs(x = "Sexo", y = "SNV", color = "Variant group", title = "SNVs per year") +
+  theme_light() +
+  theme(legend.position = "none")
+
+p_isnv_sex <- iSNV_date_plot %>%
+  ggplot(aes(x = Sex, y = n_isnv, color = pangolin_location)) +
+  geom_quasirandom(width = 0.18, alpha = 0.85) +
+   scale_color_manual(values = c("Santiago" = "blue", "Rancagua" = "red")) + 
+  facet_wrap(~ year) +
+  labs(x = "Sexo", y = "iSNV", color = "Variant group", title = "iSNVs per year") +
+  theme_light() +
+  theme(legend.position = "none")
+
+p_snv_date <- MutSNV_plot %>%
+  ggplot(aes(x = Date, y = n_snv)) +
+  geom_point(aes(color = pangolin_location), size = 2, alpha = 0.9) +
+  geom_smooth(data = MutSNV, method = "lm", se = TRUE) +
+   scale_color_manual(values = c("Santiago" = "blue", "Rancagua" = "red")) + 
+  stat_poly_eq(
+    data = MutSNV,
+    aes(label = paste(after_stat(eq.label), after_stat(rr.label), sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  ) +
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%Y") +
+  labs(title = "SNVs vs Date", x = "Date", y = "SNV") +
+  theme_light() +
+  theme(legend.position = "none")
+
+p_isnv_date <- iSNV_date_plot %>% 
+  ggplot(aes(x = Date, y = n_isnv)) +
+  geom_point(aes(color = Region), size = 2, alpha = 0.9) +
+  geom_smooth(data = iSNV_date_data, method = "lm", se = TRUE) +
+   scale_color_manual(values = c("Metropolitana" = "blue", "O'Higgins" = "red")) + 
+  stat_poly_eq(
+    data = iSNV_date_data,
+    aes(label = paste(after_stat(eq.label), after_stat(rr.label), sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  ) +
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%Y") +
+  labs(title = "iSNVs vs Date", x = "Date", y = "iSNV") +
+  theme_light() +
+  theme(legend.position = "bottom")
+
+(p_snv_sex / p_isnv_sex) | (p_snv_date / p_isnv_date)
+
+pdf("iSNV_SNV_date.pdf",8,6)
+(p_snv_sex / p_isnv_sex) | (p_snv_date / p_isnv_date)
+dev.off()
+
+
+```
+
+```{r isnv_snv_date_lm}
+snv_date_lm <- lm(n_snv ~ Date, data = MutSNV)
+isnv_date_lm <- lm(n_isnv ~ Date, data = iSNV_date_data)
+
+summary(snv_date_lm)
+summary(isnv_date_lm)
+
+glimpse(isnv_date_lm)
+```
+
+## Linear Regression Model
+
+This linear model using iSNV burden and Pangolin/COI annotations from this analysis.
+
+```{r isnv_linear_model}
+coverage_file <- if (file.exists("resume_samtools_coverage.txt")) {
+  "resume_samtools_coverage.txt"
+} else {
+  "analysis/resume_samtools_coverage.txt"
+}
+
+coverage_qc <- read.table(coverage_file, h = TRUE) %>%
+  mutate(
+    barcode = as.integer(stringr::str_extract(sname, "(?<=-)\\d+")),
+    logc = log10(meandepth)
+  ) %>%
+  select(barcode, meandepth, coverage, logc)
+
+variant_min_n <- 5
+
+valid_lineage_groups <- isnv_sample_qc %>%
+  count(lineage_group, name = "n_samples_group") %>%
+  filter(n_samples_group >= variant_min_n) %>%
+  pull(lineage_group)
+
+isnv_lm_data <- isnv_sample_qc %>%
+  filter(lineage_group %in% valid_lineage_groups) %>%
+  left_join(coverage_qc, by = "barcode") %>%
+  mutate(
+    age2 = case_when(
+      Age < 30 ~ "young",
+      Age >= 30 & Age < 50 ~ "adult",
+      TRUE ~ "older"
+    ),
+    age2 = relevel(factor(age2), ref = "adult"),
+    Sex = factor(Sex),
+    lineage_group = relevel(droplevels(factor(lineage_group)), ref = "Other"),
+    n = n_isnv
+  ) %>%
+  drop_na(n, age2, Sex, mut_ivar, lineage_group, Ct, logc)
+
+isnv_lm_data %>%
+  count(lineage_group, name = "n_samples_group") %>%
+  arrange(desc(n_samples_group))
+
+iSNVlm <- lm(n ~ Age + Sex + mut_ivar + lineage_group + Ct + logc, data = isnv_lm_data)
+summary(iSNVlm)
+```
+
+```{r negative_binomial}
+
+library(MASS)
+library(broom)
+
+m_nb_adj <- glm.nb(
+  n_isnv ~ Ct + logc + pangolin_variant + Age + Sex + co_infection,
+  data = isnv_lm_data
+)
+
+tidy(m_nb_adj, exponentiate = TRUE, conf.int = TRUE)
+
+
+
+```
+boostrap model 
+```{r bostrap}
+
+library(MASS)
+library(boot)
+library(dplyr)
+
+# Fit the original model first
+m_nb_adj <- glm.nb(
+  n_isnv ~ Ct + logc + pangolin_variant + Age + Sex + co_infection,
+  data = isnv_lm_data
+)
+
+# Expected coefficient names
+coef_names <- names(coef(m_nb_adj))
+
+# Safe bootstrap function
+boot_fun <- function(data, idx) {
+  d <- data[idx, ]
+
+  fit <- tryCatch(
+    glm.nb(
+      n_isnv ~ Ct + logc + pangolin_variant + Age + Sex + co_infection,
+      data = d
+    ),
+    error = function(e) NULL
+  )
+
+  out <- rep(NA_real_, length(coef_names))
+  names(out) <- coef_names
+
+  if (!is.null(fit)) {
+    b <- coef(fit)
+    out[names(b)] <- b
+  }
+
+  out
+}
+
+set.seed(123)
+
+boot_nb <- boot(
+  data = isnv_lm_data,
+  statistic = boot_fun,
+  R = 1000
+)
+
+boot_nb
+
+
+boot_summary <- lapply(seq_along(coef_names), function(i) {
+  vals <- boot_nb$t[, i]
+  vals <- vals[is.finite(vals)]
+
+  tibble(
+    term = coef_names[i],
+    estimate_log = coef(m_nb_adj)[i],
+    boot_low_log = quantile(vals, 0.025, na.rm = TRUE),
+    boot_high_log = quantile(vals, 0.975, na.rm = TRUE),
+    estimate = exp(coef(m_nb_adj)[i]),
+    boot_low = exp(quantile(vals, 0.025, na.rm = TRUE)),
+    boot_high = exp(quantile(vals, 0.975, na.rm = TRUE)),
+    n_success = length(vals)
+  )
+}) %>%
+  bind_rows()
+
+boot_summary
+
+boot_summary %>%
+  filter(term %in% c(
+    "SexM",
+    "co_infectionYes",
+    "pangolin_variantOmicron",
+    "Ct",
+    "logc"
+  ))
+```
+
+bayesian model
+```{r bayes}
+library(brms)
+
+isnv_lm_data2 <- isnv_lm_data %>%
+  mutate(
+    z_Ct = as.numeric(scale(Ct)),
+    z_log_depth = as.numeric(scale(log10(meandepth))),
+    z_Age = as.numeric(scale(Age))
+  )
+
+m_bayes_scaled <- brm(
+  n_isnv ~ z_Ct + z_log_depth + pangolin_variant + z_Age + Sex + co_infection,
+  family = negbinomial(),
+  data = isnv_lm_data2,
+  chains = 4,
+  cores = 4,
+  iter = 6000,
+  warmup = 3000,
+  control = list(adapt_delta = 0.99, max_treedepth = 15),
+  seed = 123
+)
+
+summary(m_bayes_scaled)
+posterior_summary(m_bayes_scaled)
+
+```
+
+pairs comparison
+```{r krustal}
+
+# Variants/groups with enough samples
+kw_data <- isnv_lm_data %>%
+  filter(lineage_group %in% c("Lambda", "Omicron", "Other", "Co-Infection"))
+
+kruskal.test(n_isnv ~ lineage_group, data = kw_data)
+
+pairwise.wilcox.test(
+  kw_data$n_isnv,
+  kw_data$lineage_group,
+  p.adjust.method = "BH",
+  exact = FALSE
+)
+
+# -----------------------------
+# Sex comparison
+# -----------------------------
+sex_summary <- isnv_lm_data %>%
+  group_by(Sex) %>%
+  summarise(
+    n = n(),
+    median_iSNV = median(n_isnv, na.rm = TRUE),
+    IQR_iSNV = IQR(n_isnv, na.rm = TRUE),
+    mean_iSNV = mean(n_isnv, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+sex_summary
+
+# Wilcoxon rank-sum test
+wilcox.test(n_isnv ~ Sex, data = isnv_lm_data, exact = FALSE)
+
+```
+generate the figure for the ms figure version v2 
+```{r fmethods}
+library(tidyverse)
+library(brms)
+library(patchwork)
+library(ggpubr)
+library(scales)
+library(tibble)
+
+# ============================================================
+# Figure: Bayesian predictors + unadjusted group comparisons
+# ============================================================
+
+# ------------------------------------------------------------
+# Panel A: Bayesian model forest plot
+# ------------------------------------------------------------
+
+bayes_tab <- as.data.frame(
+  fixef(m_bayes_scaled, probs = c(0.025, 0.975))
+) %>%
+  tibble::rownames_to_column("term") %>%
+  as_tibble() %>%
+  filter(term != "Intercept") %>%
+  mutate(
+    estimate = exp(Estimate),
+    conf.low = exp(Q2.5),
+    conf.high = exp(Q97.5)
+  )
+
+forest_dat <- bayes_tab %>%
+  mutate(
+    term_label = dplyr::case_when(
+      term == "z_Ct" ~ "PCR Ct value (1 SD)",
+      term == "z_log_depth" ~ "Average genome coverage (log, 1 SD)",
+      term == "pangolin_variantGamma" ~ "Variant: Gamma",
+      term == "pangolin_variantLambda" ~ "Variant: Lambda",
+      term == "pangolin_variantOmicron" ~ "Variant: Omicron",
+      term == "pangolin_variantOther" ~ "Variant: Other",
+      term == "z_Age" ~ "Age (1 SD)",
+      term == "SexM" ~ "Sex: male (vs female)",
+      term == "co_infectionYes" ~ "Candidate co-infection",
+      TRUE ~ term
+    )
+  ) %>%
+  dplyr::select(term_label, estimate, conf.low, conf.high) %>%
+  arrange(estimate) %>%
+  mutate(
+    term_label = factor(term_label, levels = term_label)
+  )
+
+pA <- ggplot(forest_dat, aes(x = estimate, y = term_label)) +
+  geom_vline(
+    xintercept = 1,
+    linetype = "dashed",
+    color = "grey45",
+    linewidth = 0.7
+  ) +
+  geom_errorbarh(
+    aes(xmin = conf.low, xmax = conf.high),
+    height = 0.18,
+    linewidth = 0.8,
+    color = "black"
+  ) +
+  geom_point(
+    size = 2.9,
+    color = "black"
+  ) +
+  scale_x_log10(
+    breaks = c(0.5, 0.75, 1, 1.25, 1.5, 2),
+    labels = scales::label_number(accuracy = 0.01)
+  ) +
+  labs(
+    title = "Predictors of iSNV count (IRR, 95% CrI)",
+    x = "Incidence rate ratio",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    axis.title.x = element_text(size = 13),
+    axis.text.y = element_text(size = 11.5),
+    axis.text.x = element_text(size = 11),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(t = 8, r = 12, b = 8, l = 8)
+  )
+
+# ------------------------------------------------------------
+# Panel B: Sex comparison, unadjusted Wilcoxon test
+# ------------------------------------------------------------
+
+sex_dat <- isnv_lm_data %>%
+  mutate(
+    Sex = factor(Sex, levels = c("F", "M"))
+  )
+
+ymin_B <- min(sex_dat$n_isnv, na.rm = TRUE)
+ymax_B <- max(sex_dat$n_isnv, na.rm = TRUE)
+
+pB <- ggplot(sex_dat, aes(x = Sex, y = n_isnv, color = Sex)) +
+  geom_boxplot(
+    outlier.shape = NA,
+    width = 0.45,
+    alpha = 0.25,
+    linewidth = 0.8
+  ) +
+  geom_jitter(
+    width = 0.12,
+    size = 2.2,
+    alpha = 0.8
+  ) +
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.format",
+    label.y = ymax_B + 12,
+    size = 5
+  ) +
+  scale_color_manual(
+    values = c(
+      "F" = "#4C78A8",
+      "M" = "#E0B52B"
+    )
+  ) +
+  scale_y_continuous(
+    limits = c(ymin_B - 2, ymax_B + 20),
+    expand = expansion(mult = c(0.02, 0.02))
+  ) +
+  coord_cartesian(clip = "off") +
+  labs(
+    x = "Sex",
+    y = "Number of iSNVs"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.title = element_text(size = 13),
+    axis.text = element_text(size = 12),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(t = 22, r = 10, b = 8, l = 8)
+  )
+
+# ------------------------------------------------------------
+# Panel C: Lineage-group comparison
+# Kruskal-Wallis + selected pairwise Wilcoxon tests
+# ------------------------------------------------------------
+
+kw_data <- isnv_lm_data %>%
+  filter(lineage_group %in% c("Other", "Lambda", "Omicron", "Co-Infection")) %>%
+  mutate(
+    lineage_group = factor(
+      lineage_group,
+      levels = c("Other", "Lambda", "Omicron", "Co-Infection")
+    )
+  ) %>%
+  droplevels()
+
+ymin_C <- min(kw_data$n_isnv, na.rm = TRUE)
+ymax_C <- max(kw_data$n_isnv, na.rm = TRUE)
+
+# Pairwise comparisons selected from your BH-adjusted Wilcoxon results
+comparisons <- list(
+  c("Other", "Omicron"),
+  c("Lambda", "Omicron"),
+  c("Other", "Co-Infection")
+)
+
+pC <- ggplot(kw_data, aes(x = lineage_group, y = n_isnv, color = lineage_group)) +
+  geom_boxplot(
+    outlier.shape = NA,
+    width = 0.5,
+    alpha = 0.22,
+    linewidth = 0.8
+  ) +
+  geom_jitter(
+    width = 0.12,
+    size = 2.2,
+    alpha = 0.85
+  ) +
+  stat_compare_means(
+    method = "kruskal.test",
+    label = "p.format",
+    label.y = ymax_C + 40,
+    size = 4.7
+  ) +
+  stat_compare_means(
+    comparisons = comparisons,
+    method = "wilcox.test",
+    p.adjust.method = "BH",
+    label = "p.format",
+    label.y = c(ymax_C + 8, ymax_C + 18, ymax_C + 28),
+    size = 4.2
+  ) +
+  scale_color_manual(
+    values = c(
+      "Other" = "#3A9D23",
+      "Lambda" = "#8E7CC3",
+      "Omicron" = "#C67C2E",
+      "Co-Infection" = "black"
+    )
+  ) +
+  scale_y_continuous(
+    limits = c(ymin_C - 2, ymax_C + 48),
+    expand = expansion(mult = c(0.02, 0.02))
+  ) +
+  coord_cartesian(clip = "off") +
+  labs(
+    x = "SARS-CoV-2 variant",
+    y = "Number of iSNVs"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.title = element_text(size = 13),
+    axis.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 20, hjust = 1),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(t = 28, r = 10, b = 8, l = 8)
+  )
+
+# ------------------------------------------------------------
+# Combine figure
+# ------------------------------------------------------------
+
+final_fig <- pA + (pB / pC) +
+  plot_layout(widths = c(1.25, 1)) +
+  plot_annotation(
+    tag_levels = "A",
+    theme = theme(
+      plot.tag = element_text(face = "bold", size = 18)
+    )
+  )
+
+final_fig
+
+# ------------------------------------------------------------
+# Save figure
+# ------------------------------------------------------------
+
+#ggsave(
+#  "figures/isnv_predictors_bayes_unadjusted.png",
+#  final_fig,
+#  width = 13,
+#  height = 7.5,
+#  dpi = 300
+#)
+
+ggsave(
+  "isnv_predictors_bayes_unadjusted.pdf",
+  final_fig,
+  width = 10,
+  height = 7.5
+)
+```
+
+## DN/DS analysis
+
+we perform primary analysis of dn/ds using the primary data first and new CO_Infection calls
+```{r dnds}
+
+library(dndscv)
+#sampleID chr      pos ref mut
+names <- c(sampleID="barcode", chr="REGION", pos="POS",ref="REF",mut="ALT")
+omicron=isnv_primary %>% filter(Ct<=25) %>% filter(lineage_group=="Omicron") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names))
+
+
+#we remove iSNVs happening at the same positiion within
+other=isnv_primary %>% filter(Ct<=25) %>% filter(lineage_group=="Other") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) #%>%  distinct(chr, pos, ref, mut, .keep_all = TRUE)
+Lambda=isnv_primary %>% filter(Ct<=25) %>% filter(lineage_group=="Lambda") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) #%>% distinct(chr, pos, ref, mut, .keep_all = TRUE)
+Coi=isnv_primary %>% filter(Ct<=25) %>% filter(lineage_group=="Co-Infection") %>% dplyr::select(barcode,REGION,POS,REF,ALT) %>% rename(all_of(names)) #%>% distinct(chr, pos, ref, mut, .keep_all = TRUE)
+
+# we run the dnds analisys 
+dnds_omi = dndscv(omicron, refdb = "analysis/dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_oth = dndscv(other, refdb = "analysis/dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_lam = dndscv(Lambda, refdb = "analysis/dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+dnds_coi = dndscv(Coi, refdb = "analysis//dndscv/db/RefCDS_MN908947.3.peptides.rda", max_muts_per_gene_per_sample = Inf, max_coding_muts_per_sample = Inf)
+
+a=dnds_oth$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Other")
+b=dnds_lam$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Lambda")
+c=dnds_omi$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Omicron")
+d=dnds_coi$sel_cv %>% dplyr::select(gene_name,wmis_cv) %>% mutate(var="Co-Infection")
+
+```
+
+
+plot the results
+
+```{r figdnds2}
+# ---- Packages
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
+
+
+# ---- 3) Aesthetic choices ----
+variant_colors <- c(
+  "Lambda" = "#8E7CC3",
+  "Omicron" = "#B45F06",
+  "Other" = "#38761D",
+  "Co-Infection" = "#333333"
+)
+
+# ---- Global panel with CIs
+global_dnds <- dplyr::bind_rows(
+  dnds_oth$globaldnds[5,],
+  dnds_lam$globaldnds[5,],
+  dnds_omi$globaldnds[5,],
+  dnds_coi$globaldnds[5,]
+) %>%
+  mutate(
+    name = c("Other","Lambda","Omicron","Co-Infection"),
+    name = factor(name, levels = c("Other","Lambda","Omicron","Co-Infection"))
+  )
+
+p_global <- ggplot(global_dnds, aes(x = name, y = mle, color = name)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_pointrange(aes(ymin = cilow, ymax = cihigh), position = position_dodge(width = 0.2)) +
+  scale_color_manual(values = variant_colors, guide = "none") + ylim(0,1.2) +
+#  coord_flip() +
+  labs(
+    x = NULL,
+    y = expression("Global " * omega ~ "(dN/dS, MLE)"),
+    title = "Global dN/dS"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 12),
+    axis.title.y = element_text(margin = margin(r = 5)),
+    axis.text.x = element_text(size = 10, angle = 20, hjust = 1)
+  )
+
+
+# ---- Combine (narrow global panel + wider gene panel)
+#final_dn_ds_fig <- p_global + p_genes + plot_layout(widths = c(1, 3))
+#final_dn_ds_fig
+#pdf("FigX.pdf",height = 8,width = 16)
+#final_dn_ds_fig
+#dev.off()
+
+
+# ---- 1) Combine & harmonize ----
+# a, b, c, d must each have: gene_name, wmis_cv, var
+df <- dplyr::bind_rows(a, b, c, d) %>%
+  mutate(
+    var = factor(var, levels = c("Other", "Lambda", "Omicron", "Co-Infection"))
+  )
+
+# ---- 2) Global gene order (same across all panels) ----
+# Order by max dN/dS across variants (descending)
+gene_levels <- df %>%
+  group_by(gene_name) %>%
+  summarize(max_omega = max(wmis_cv, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(max_omega)) %>%
+  pull(gene_name)
+
+df <- df %>%
+  mutate(
+    gene_name = factor(gene_name, levels = rev(gene_levels)),   # top = highest
+    # Cap at 5 for plotting, flag those > 5
+    omega_cap = pmin(wmis_cv, 3),
+    capped    = wmis_cv > 3
+  )
+
+
+
+# Helper to make one panel; show_y controls gene labels
+make_panel <- function(v, show_y = FALSE, show_x = FALSE) {
+  ggplot(df %>% filter(var == v),
+         aes(x = omega_cap, y = gene_name)) +
+    geom_vline(xintercept = 1, linetype = "dashed", linewidth = 0.5) +
+    geom_point(aes(shape = capped),
+               size = 2.2,
+               color = variant_colors[[as.character(v)]]) +
+    scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 17), guide = "none") +
+    coord_cartesian(xlim = c(0, 3)) +
+    labs(
+      title = as.character(v),
+      x = if (show_x) "dN/dS (missense, ω)" else NULL,
+      y = if (show_y) "Gene" else NULL
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title = element_text(size = 12, hjust = 0),
+      axis.text.y = if (show_y) element_text(size = 9) else element_blank(),
+      axis.title.y = if (show_y) element_text() else element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# ---- 4) Build panels (labels only on the first) ----
+p_other <- make_panel("Other",        show_y = TRUE)
+p_lambda <- make_panel("Lambda",      show_y = FALSE)
+p_omi   <- make_panel("Omicron",      show_y = FALSE, show_x = TRUE)
+p_coi   <- make_panel("Co-Infection", show_y = FALSE)
+
+# ---- 5) Combine with patchwork ----
+gene_panels <- p_other | p_lambda | p_omi | p_coi
+gene_panels
+
+final_dn_ds_fig <- p_global + gene_panels + plot_layout(widths = c(1, 3))
+
+pdf("Fig4_dnds.pdf",width = 10, height = 5)
+final_dn_ds_fig
+dev.off()
+
+final_dn_ds_fig
+
+
+
+```
+
+Stadistical tests at gene-level between variants, 
+we aim to anwser whether 
+```{r statstest}
+kruskal.test(as.numeric(wmis_cv) ~ var, data = df)
+#pairwise test
+FSA::dunnTest(wmis_cv ~ var, data=df, method="bh")
+
+# accounting for gene differences
+library(lme4)
+m <- lmer(wmis_cv ~ var + (1 | gene_name), data=df)
+anova(m)
+
+
+```
+
+Report table of DN/DS
+
+```{r tables_dnds}
+var=df %>% dplyr::select(gene_name,wmis_cv,var)%>% pivot_wider(names_from=var, values_from = wmis_cv)
+global_dnds
+var
+write_csv(var,"dnds_per_gene_var.txt")
+
+a=dnds_oth$sel_cv %>% dplyr::select(gene_name,n_syn,n_mis,wmis_cv,qmis_cv) %>% mutate(var="Other")
+b=dnds_lam$sel_cv %>% dplyr::select(gene_name,n_syn,n_mis,wmis_cv,qmis_cv) %>% mutate(var="Lambda")
+c=dnds_omi$sel_cv %>% dplyr::select(gene_name,n_syn,n_mis,wmis_cv,qmis_cv) %>% mutate(var="Omicron")
+d=dnds_coi$sel_cv %>% dplyr::select(gene_name,n_syn,n_mis,wmis_cv,qmis_cv) %>% mutate(var="Co-Infection")
+
+df_g <- dplyr::bind_rows(a, b, c, d)
+df_g=df_g %>% arrange(var,gene_name) 
+write_csv(df_g,"dnds_per_gene_var_details.txt")
+
+```
+
+

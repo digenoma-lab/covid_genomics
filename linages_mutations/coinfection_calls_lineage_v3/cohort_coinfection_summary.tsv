@@ -1,0 +1,96 @@
+sample	n_filtered_variants	major_label	major_n_supported_sites	major_frac_supported_sites	major_status	co_infection_flag	minor_label	minor_n_supported_sites	minor_median_af	confidence_tier	minor_supported_mutations
+V350082740_L14_32-32_variants	152	C.37	13	0.9285714285714286	assigned	True	AY.1	5	0.365535	low	22813:G>T|24410:G>A|25469:C>T|27638:T>C|28461:A>G
+V350082740_L14_83-83_variants	169	C.37	12	0.8571428571428571	assigned	True	AY.1	5	0.364236	low	22813:G>T|24410:G>A|25469:C>T|27638:T>C|28461:A>G
+V350082740_L14_36-36_variants	160	B.1.1.7	17	0.8095238095238095	assigned	True	AY.1	5	0.359972	low	22813:G>T|24410:G>A|25469:C>T|27638:T>C|28461:A>G
+V350082740_L14_90-90_variants	209	C.37	12	0.8571428571428571	assigned	True	AY.1	5	0.356129	low	22813:G>T|24410:G>A|25469:C>T|27638:T>C|28461:A>G
+V350082740_L14_96-96_variants	200	B.1.1.529	20	0.6896551724137931	assigned	True	AY.1	5	0.287432	low	24410:G>A|25469:C>T|27638:T>C|28461:A>G|29402:G>T
+V350082740_L14_43-43_variants	74	P.1	9	0.6428571428571429	assigned	True	AY.1	5	0.227606	low	22813:G>T|22995:C>A|24410:G>A|25469:C>T|28461:A>G
+V350082740_L14_45-45_variants	73	P.1	9	0.6428571428571429	assigned	True	B.1.1.529	5	0.170891	low	22992:G>A|22995:C>A|23013:A>C|23948:G>T|28311:C>T
+V350082740_L14_30-30_variants	130	P.1	8	0.5714285714285714	assigned	True	B.1.1.529	5	0.141763	low	22992:G>A|22995:C>A|23013:A>C|23948:G>T|28311:C>T
+V350082740_L14_40-40_variants	49	P.1	8	0.5714285714285714	assigned	True	AY.1	7	0.238502	medium	22813:G>T|22995:C>A|24410:G>A|25469:C>T|27638:T>C|28461:A>G|29402:G>T
+V350082740_L14_59-59_variants	222	B.1.1.529	18	0.6206896551724138	assigned	True	C.37	7	0.129952	medium	10097:G>A|21786:G>T|21789:C>T|23031:T>C|24138:C>A|7424:T>G|9867:T>C
+V350082740_L14_44-44_variants	84	P.1	9	0.6428571428571429	assigned	True	AY.1	6	0.3102695	medium	22813:G>T|22995:C>A|24410:G>A|25469:C>T|27638:T>C|28461:A>G
+V350082740_L14_25-25_variants	131	P.1	8	0.5714285714285714	assigned	True	AY.1	6	0.260712	medium	22813:G>T|22995:C>A|25469:C>T|27638:T>C|28461:A>G|29402:G>T
+V350082740_L14_75-75_variants	175	C.37	12	0.8571428571428571	assigned	True	B.1.1.529	6	0.139514	medium	10449:C>A|22992:G>A|23013:A>C|23948:G>T|26709:G>A|27807:C>T
+V350082740_L14_01-01_variants	44		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_02-02_variants	60		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_03-03_variants	37		3	0.10344827586206896	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_04-04_variants	186		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_05-05_variants	148		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_06-06_variants	115		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_07-07_variants	133		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_08-08_variants	45		3	0.13043478260869565	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_09-09_variants	48		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_10-10_variants	100		3	0.2727272727272727	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_11-11_variants	102		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_12-12_variants	81		3	0.2727272727272727	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_13-13_variants	91		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_14-14_variants	53		1	0.09090909090909091	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_15-15_variants	104		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_16-16_variants	83		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_17-17_variants	187		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_18-18_variants	66		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_19-19_variants	117		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_20-20_variants	156		3	0.13043478260869565	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_21-21_variants	92		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_22-22_variants	130		3	0.21428571428571427	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_23-23_variants	143		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_24-24_variants	61		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_26-26_variants	145	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_27-27_variants	127	B.1.427	8	0.7272727272727273	assigned	False		0	0.0	none	
+V350082740_L14_28-28_variants	108	C.37	13	0.9285714285714286	assigned	False		0	0.0	none	
+V350082740_L14_29-29_variants	136	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_31-31_variants	75	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_33-33_variants	103	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_34-34_variants	119	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_35-35_variants	61	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_37-37_variants	132		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_38-38_variants	80	C.37	13	0.9285714285714286	assigned	False		0	0.0	none	
+V350082740_L14_39-39_variants	62	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_41-41_variants	59	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_42-42_variants	64	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_46-46_variants	54	C.37	13	0.9285714285714286	assigned	False		0	0.0	none	
+V350082740_L14_47-47_variants	49	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_48-48_variants	61	P.1	9	0.6428571428571429	assigned	False		0	0.0	none	
+V350082740_L14_49-49_variants	122	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_50-50_variants	221	B.1.1.529	18	0.6206896551724138	assigned	False		0	0.0	none	
+V350082740_L14_51-51_variants	139	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_52-52_variants	123	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_53-53_variants	181		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_54-54_variants	149	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_55-55_variants	177	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_56-56_variants	217	B.1.1.529	20	0.6896551724137931	assigned	False		0	0.0	none	
+V350082740_L14_57-57_variants	159	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_58-58_variants	175	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_60-60_variants	216	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_61-61_variants	106		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_62-62_variants	175	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_63-63_variants	123	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_64-64_variants	226	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_65-65_variants	230	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_66-66_variants	193	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_67-67_variants	170	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_68-68_variants	177		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_69-69_variants	173	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_70-70_variants	201	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_72-72_variants	147	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_73-73_variants	196		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_74-74_variants	212	C.37	12	0.8571428571428571	assigned	False		0	0.0	none	
+V350082740_L14_76-76_variants	146		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_77-77_variants	116		2	0.18181818181818182	unassigned_low_support	False		0	0.0	none	
+V350082740_L14_78-78_variants	121	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_79-79_variants	207	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_80-80_variants	148	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_81-81_variants	127	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_82-82_variants	123	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_84-84_variants	123	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_85-85_variants	182	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_86-86_variants	78	B.1.1.529	20	0.6896551724137931	assigned	False		0	0.0	none	
+V350082740_L14_87-87_variants	241	B.1.1.529	20	0.6896551724137931	assigned	False		0	0.0	none	
+V350082740_L14_88-88_variants	169	B.1.1.529	18	0.6206896551724138	assigned	False		0	0.0	none	
+V350082740_L14_89-89_variants	148	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_91-91_variants	182	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_92-92_variants	126	B.1.1.529	20	0.6896551724137931	assigned	False		0	0.0	none	
+V350082740_L14_93-93_variants	126	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	
+V350082740_L14_94-94_variants	85	B.1.1.529	20	0.6896551724137931	assigned	False		0	0.0	none	
+V350082740_L14_95-95_variants	128	B.1.1.529	21	0.7241379310344828	assigned	False		0	0.0	none	

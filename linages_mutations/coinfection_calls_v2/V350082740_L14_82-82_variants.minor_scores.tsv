@@ -1,0 +1,35 @@
+candidate_minor_lineage	n_specific_sites	n_minor_supported	minor_median_af	minor_mean_af	minor_supported_mutations	minor_supported_alt_dp	minor_supported_total_dp	passes_minor_rule
+AY.1	7	2	0.2139685	0.2139685	['25469:C>T', '28461:A>G']	[24826.0, 5917.0]	[85738.0, 42759.0]	False
+B.1.617.2	5	2	0.2139685	0.2139685	['25469:C>T', '28461:A>G']	[24826.0, 5917.0]	[85738.0, 42759.0]	False
+B.1.1.7	21	2	0.197063	0.197063	['23709:C>T', '27972:C>T']	[8520.0, 8166.0]	[48435.0, 37421.0]	False
+B.1.617.1	7	1	0.289557	0.289557	['25469:C>T']	[24826.0]	[85738.0]	False
+AY.4.2	3	1	0.181461	0.181461	['22227:C>T']	[4577.0]	[25223.0]	False
+A.23.1	19	0	0.0	0.0	[]	[]	[]	False
+AV.1	9	0	0.0	0.0	[]	[]	[]	False
+AY.4	18	0	0.0	0.0	[]	[]	[]	False
+B.1.1.318	18	0	0.0	0.0	[]	[]	[]	False
+B.1.351	10	0	0.0	0.0	[]	[]	[]	False
+B.1.427	8	0	0.0	0.0	[]	[]	[]	False
+B.1.429	9	0	0.0	0.0	[]	[]	[]	False
+B.1.525	18	0	0.0	0.0	[]	[]	[]	False
+B.1.526	18	0	0.0	0.0	[]	[]	[]	False
+B.1.617.3	12	0	0.0	0.0	[]	[]	[]	False
+B.1.621	16	0	0.0	0.0	[]	[]	[]	False
+BA.1	25	0	0.0	0.0	[]	[]	[]	False
+BA.2	10	0	0.0	0.0	[]	[]	[]	False
+BA.3	9	0	0.0	0.0	[]	[]	[]	False
+BA.4	10	0	0.0	0.0	[]	[]	[]	False
+BA.5	7	0	0.0	0.0	[]	[]	[]	False
+C.37	13	0	0.0	0.0	[]	[]	[]	False
+P.1	14	0	0.0	0.0	[]	[]	[]	False
+P.2	8	0	0.0	0.0	[]	[]	[]	False
+P.3	16	0	0.0	0.0	[]	[]	[]	False
+XBB	15	0	0.0	0.0	[]	[]	[]	False
+XBB-parent1	6	0	0.0	0.0	[]	[]	[]	False
+XBB-parent2	1	0	0.0	0.0	[]	[]	[]	False
+XBB.1	5	0	0.0	0.0	[]	[]	[]	False
+XBB.1.16	5	0	0.0	0.0	[]	[]	[]	False
+XBB.1.5	4	0	0.0	0.0	[]	[]	[]	False
+XE	3	0	0.0	0.0	[]	[]	[]	False
+XE-parent1	4	0	0.0	0.0	[]	[]	[]	False
+XE-parent2	5	0	0.0	0.0	[]	[]	[]	False
